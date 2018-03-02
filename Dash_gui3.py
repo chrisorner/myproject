@@ -79,7 +79,7 @@ class Solar():
         k= 1.38*10**(-23)
         q=1.602*10**(-19)
         UT= k*T/q
-        const= 0.001 
+        const= 0.0011 
         #print(UT)
         
         
@@ -303,67 +303,83 @@ app = dash.Dash()
 
 app.layout = html.Div([
         html.Div([html.H1(
-                    'Solar Energy Calculator'),]),
+                    'Solar Energy Calculator')]),
         html.Div([
-            dcc.Graph(id='graph-with-slider'),
-            ],style={'width': '48%','display': 'inline-block'}),
-        html.Div([
-                    dcc.Graph(id='Main_graph'),
+            html.Div([
+                dcc.Graph(id='graph-with-slider'),
+                dcc.Graph(id='Main_graph')
+                    ],style={'width': '48%', 'display':'table-cell','verticalAlign': 'top'}),
+        
+             html.Div([
                     html.Div([
-                            html.Label('Number of Days',id='days_label'),
-                            dcc.Input(id='days', value='2', type='text')],style={'float':'left',}),
+                                html.Div([
+                                        html.H4('Some Parameter')],style=dict(dispaly='block')),
+    
+                                html.Div([
+                                        html.Div([
+                                                html.Label('Number of Days',id='days_label'),
+                                                dcc.Input(id='days', value='2', type='text')],style=dict(display='table-cell')),
+                                        html.Div([
+                                                html.Label('Battery Capacity [Wh]',id='cap_label'),
+                                                dcc.Input(id='capacity', value='100', type='text')],style=dict(display='table-cell'))                   
+                                ],style={'display': 'table', })
+                            ],style={'padding':'10px', 'border': 'thin solid grey'}),
                     html.Div([
-                            html.Label('Battery Capacity [Wh]',id='cap_label'),
-                            dcc.Input(id='capacity', value='100', type='text')],style={'float':'right'})                   
-                    ],style={'width': '48%','display': 'inline-block'}),
-        html.Div([
-            html.P('Ambient Temperature [K]'),
-            dcc.Slider(
-                id='Ambient_Temp',
-                min=273,
-                max=353,
-                value=293,
-                step=None,
-                marks={i: str(i) for i in range(273,353,10)}
-            ),
-            html.P('Radiation Amplitude [W/m2]'),
-            dcc.Slider(
-                id='rad_ampl',
-                min=0,
-                max=1000,
-                value=1000,
-                step=None,
-                marks={str(i): str(i) for i in range(0,1100,100)}
-                    ),
-            html.P('Scaling factor [-]'),
-            dcc.Slider(
-                id='rad_width',
-                min=20,
-                max=80,
-                value=50,
-                #step=None,
-                marks={str(i): str(i) for i in range(20,80,10)}
-                    ),
-        ],style={'width': '48%', 'display': 'inline-block'}),
+                                html.Div([
+                                        html.H4('Some more Parameter')],style=dict(dispaly='block')),
+                                html.Div([
+                                        html.Div([
+                                                html.Label('Cost of Battery [EUR/Wh]',id='cost_label'),
+                                                dcc.Input(id='cost_bat', value='10', type='text')],style={'width':'30%','display':'table-cell'}),
+                                        html.Div([
+                                                html.Label('Cost per kWh [EUR/kWh]',id='cost_label2'),
+                                                dcc.Input(id='cost_kwh', value='0.3', type='text')],style={'width':'30%','display':'table-cell'}),
+                                        html.Div([
+                                                html.Label('Solar Power [Wp]',id='cost_label3'),
+                                                dcc.Input(id='solar_power', value='200', type='text')],style={'width':'30%','display':'table-cell'})
+                                        ],style={'display': 'table'}),
+                            ],style={'padding':'10px','border': 'thin solid grey'}),
+                                
+                    html.Div([
+                                html.P('Ambient Temperature [K]'),
+                                dcc.Slider(
+                                    id='Ambient_Temp',
+                                    min=273,
+                                    max=353,
+                                    value=293,
+                                    step=None,
+                                    marks={i: str(i) for i in range(273,353,10)}
+                                ),
+                                html.P('Radiation Amplitude [W/m2]'),
+                                dcc.Slider(
+                                    id='rad_ampl',
+                                    min=0,
+                                    max=1000,
+                                    value=1000,
+                                    step=None,
+                                    marks={str(i): str(i) for i in range(0,1100,100)}
+                                        ),
+                                html.P('Scaling factor [-]'),
+                                dcc.Slider(
+                                    id='rad_width',
+                                    min=20,
+                                    max=80,
+                                    value=50,
+                                    #step=None,
+                                    marks={str(i): str(i) for i in range(20,80,10)}
+                                        )],style={'padding': '20px','display': 'block'}
+                                )],style={'width': '48%', 'display':'table-cell','verticalAlign': 'top'}
+                        )],style=dict(display='table')
+                ),
+    
+    
+    
+        
 
 
         html.Div([
                    dcc.Graph(id='Cost_graph')]),
-        html.Div([           
-                   html.Div([
-                            html.Label('Cost of Battery [EUR/Wh]',id='cost_label'),
-                            dcc.Input(id='cost_bat', value='10', type='text')],style={'width':'30%','display':'table-cell'}),
-                    html.Div([
-                            html.Label('Cost per kWh [EUR/kWh]',id='cost_label2'),
-                            dcc.Input(id='cost_kwh', value='0.3', type='text')],style={'width':'30%','display':'table-cell'}),
-                    html.Div([
-                            html.Label('Solar Power [Wp]',id='cost_label3'),
-                            dcc.Input(id='solar_power', value='200', type='text')],style={'width':'30%','display':'table-cell'})
-               ],style = dict(
-                    width = '100%',
-                    display = 'table',
-                    ),
-                )     
+    
         
 
 #'display': 'inline-block' 
@@ -464,6 +480,7 @@ def update_Main(days_input,bat_capacity,Temp,rad_ampl,rad_width):
     return {
         'data': traces,
         'layout': go.Layout(
+            title='Stored Energy in Battery',
             xaxis={'title': 'Time'},
             yaxis={'title': 'Stored Energy [Wh]'}
         )
