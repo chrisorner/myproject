@@ -30,7 +30,7 @@ t_step=1
 d_hours=np.arange(0,24,t_step)
 t_len=np.size(d_hours)
 
-N_cells=50
+N_cells=1
 
 #days are gui input
 def time(days):
@@ -54,8 +54,8 @@ class Solar():
 #        I_sc=1
         # Does not change the graph much
 #       self.Isc= float(I_sc)
-        self.Uoc=30.2
-        self.Isc=8.54
+        self.Uoc=0
+        self.Isc=0
         self.ktemp= 0.3
         #self.R= np.arange(0.1,3,0.1) takes to long to compute
         self.R= np.array([0.1,0.2,0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 3])
@@ -71,6 +71,7 @@ class Solar():
         #self.U=np.zeros([np.size(self.get_Rad()),np.size(self.R)])
         #self.P=np.zeros([np.size(self.get_Rad()),np.size(self.R)])
         self.Pmpp=np.zeros(np.size(d_hours))
+        self.Pmax=0
 #E= 600
 #T= 350
 
@@ -79,7 +80,7 @@ class Solar():
         k= 1.38*10**(-23)
         q=1.602*10**(-19)
         UT= k*T/q
-        const= 0.0011 
+        const= float(Isc)/1000 
         #print(UT)
         
         
@@ -116,10 +117,20 @@ class Solar():
         x =self.P
         y =self.Pmpp
         return x,y
+    
+    def get_Pmax(self):
+        x=self.Pmax
+        return x
 
     
-    def calc_Pmpp(self,N_cells,T,rad_ampl,rad_width):
+    def calc_Pmpp(self,N_cells,T,rad_ampl,rad_width,Isc,Uoc):
+        Umax=np.zeros(np.size(self.R))
+        Imax=np.zeros(np.size(self.R))
+        Pmax_vec=np.zeros(np.size(self.R))
+        
         #T= self.get_Temp()
+        self.Uoc=float(Uoc)
+        self.Isc=float(Isc)
         E= self.get_Rad(rad_ampl,rad_width)
         #E=1000
         for e in range(E.shape[0]):
@@ -143,8 +154,15 @@ class Solar():
         
             self.P=self.U*self.I*N_cells
             self.Pmpp[e]=np.max(self.P)
-            print(self.Pmpp)
-        #return Pmpp, P
+        print(self.Pmpp)
+        
+        for i in range(np.size(self.R)):
+            x= fsolve(self.solargen, 0.8, args=(self.R[i],self.Uoc,self.Isc,self.ktemp,1000,T))
+            Umax[i]=x
+            Imax[i]=x*self.R[i]
+            Pmax_vec[i]=Umax[i]*Imax[i]*N_cells
+        self.Pmax=np.max(Pmax_vec)
+            
     
 class Battery():
     def __init__(self):
@@ -152,7 +170,6 @@ class Battery():
         # input from gui
 #        C=Input_capacity.get()
         self.Wmax=100
-        print(self.Wmax)
         #self.stored_energy=np.zeros(np.size(t_ges))
         self.stored_energy=np.full(np.size(t_ges),200)
         self.SOC=np.zeros(np.size(t_ges))
@@ -180,7 +197,7 @@ class Battery():
         return x
         
         
-    def calc_SOC(self,t,T,rad_ampl,rad_width,bat_capacity):
+    def calc_SOC(self,t,T,rad_ampl,rad_width,bat_capacity,Isc,Uoc):
         
         #k=0
         # time counting after SOC=1
@@ -188,7 +205,7 @@ class Battery():
         #Pmpp=calc_Pmpp(Uoc, Isc, ktemp, E)
         self.Wmax=int(bat_capacity)
         Cons=Consumer()
-        Cons.calc_power(T,rad_ampl,rad_width)
+        Cons.calc_power(T,rad_ampl,rad_width,Isc,Uoc)
         P_store=Cons.get_power_to_bat()
        # P, Pmpp=Solar.get_P_Pmpp()
         #consumer=0.8*Pmpp
@@ -234,10 +251,10 @@ class Consumer():
         x=self.P_diff
         return x
     
-    def calc_power(self,T,rad_ampl,rad_width):
+    def calc_power(self,T,rad_ampl,rad_width,Isc,Uoc):
         self.power = ([20,20,0,0,5,15,15,0,0,0,20,20,0,0,0,10,15,15,40,40,10,5,0,0])
         Sol=Solar()
-        Sol.calc_Pmpp(N_cells,T,rad_ampl,rad_width)
+        Sol.calc_Pmpp(N_cells,T,rad_ampl,rad_width,Isc,Uoc)
         P, Pmpp=Sol.get_P_Pmpp()
         
         for i in range(np.size(self.power)):
@@ -246,8 +263,8 @@ class Consumer():
 class Costs():
     def __init__(self):
         #self.total_costs=np.zeros(d_len+1) # Costs must start at 0
-        self.total_costs=np.zeros(20)
-        self.total_costs_sol=np.zeros(20)
+        self.total_costs=np.zeros(200)
+        self.total_costs_sol=np.zeros(200)
         # self.battery_invest=100
         
     def battery_invest(self,capacity,cost_per_wh):
@@ -263,21 +280,21 @@ class Costs():
         
         
          
-    def calc_costs(self,T,rad_ampl,rad_width,num_d,cost_kwh,capacity,cost_bat,power):
+    def calc_costs(self,T,rad_ampl,rad_width,num_d,cost_kwh,capacity,cost_bat,power,cost_per_wp,Isc,Uoc):
         #100% grid supplly
         num_d=int(num_d)
         cost_kwh=float(cost_kwh)
         cost_battery=self.battery_invest(capacity,cost_bat)
-        cost_solar=self.solar_invest(power,5)
+        cost_solar=self.solar_invest(power,cost_per_wp)
         Cons=Consumer()
-        Cons.calc_power(T,rad_ampl,rad_width)
+        Cons.calc_power(T,rad_ampl,rad_width,Isc,Uoc)
         P_cons=Cons.get_power() #power req by consumer
         P_diff_cons_sol=Cons.get_power_to_bat() #difference between consumer and solar power
         
         costs_per_day=cost_kwh*sum(P_cons)
         for i in range(num_d):
             self.total_costs[i+1]=costs_per_day*(i+1)
-        print (self.total_costs,'total costs')
+        #print (self.total_costs,'total costs')
         
         
         #costs with solar
@@ -291,7 +308,7 @@ class Costs():
         costs_day_with_solar= cost_kwh*sum(pow_from_grid)
         for i in range(num_d+1):
             self.total_costs_sol[i]=costs_day_with_solar*(i)+cost_solar+cost_battery
-        print(self.total_costs_sol,'with sol')
+        #print(self.total_costs_sol,'with sol')
             
             
             
@@ -326,20 +343,36 @@ app.layout = html.Div([
                             ],style={'padding':'10px', 'border': 'thin solid grey'}),
                     html.Div([
                                 html.Div([
-                                        html.H4('Some more Parameter')],style=dict(dispaly='block')),
+                                        html.H4('Costs')],style=dict(dispaly='block')),
                                 html.Div([
                                         html.Div([
-                                                html.Label('Cost of Battery [EUR/Wh]',id='cost_label'),
+                                                html.Label('Battery [EUR/Wh]',id='cost_label'),
                                                 dcc.Input(id='cost_bat', value='10', type='text')],style={'width':'30%','display':'table-cell'}),
                                         html.Div([
-                                                html.Label('Cost per kWh [EUR/kWh]',id='cost_label2'),
+                                                html.Label('Grid supply [EUR/kWh]',id='cost_label2'),
                                                 dcc.Input(id='cost_kwh', value='0.3', type='text')],style={'width':'30%','display':'table-cell'}),
                                         html.Div([
-                                                html.Label('Solar Power [Wp]',id='cost_label3'),
-                                                dcc.Input(id='solar_power', value='200', type='text')],style={'width':'30%','display':'table-cell'})
+                                                html.Label('Solar Panels [EUR/Wp]',id='cost_label3'),
+                                                dcc.Input(id='cost_wp', value='200', type='text')],style={'width':'30%','display':'table-cell'}),
                                         ],style={'display': 'table'}),
                             ],style={'padding':'10px','border': 'thin solid grey'}),
-                                
+                            
+                    html.Div([
+                                html.Div([
+                                        html.H4('Data Sheet Solar Panel')],style=dict(dispaly='block')),
+                                html.Div([
+                                        html.Div([
+                                                html.Label('Short Circuit Current [A]',id='Isc_label'),
+                                                dcc.Input(id='Isc', value='8', type='text')],style={'width':'30%','display':'table-cell'}),
+                                        html.Div([
+                                                html.Label('Open circuit voltage',id='Uoc_label'),
+                                                dcc.Input(id='Uoc', value='0.6', type='text')],style={'width':'30%','display':'table-cell'}),
+                                        html.Div([
+                                                html.Label('Number of cells',id='N_cells_label'),
+                                                dcc.Input(id='N_cells', value='1', type='text')],style={'width':'30%','display':'table-cell'}),
+    
+                                        ],style={'display': 'table'}),
+                              ],style={'padding':'10px','border': 'thin solid grey'}),   
                     html.Div([
                                 html.P('Ambient Temperature [K]'),
                                 dcc.Slider(
@@ -394,19 +427,21 @@ app.layout = html.Div([
     dash.dependencies.Output('graph-with-slider', 'figure'),
     [dash.dependencies.Input('Ambient_Temp', 'value'),
      dash.dependencies.Input('rad_ampl', 'value'),
-     dash.dependencies.Input('rad_width', 'value')])
-def update_figure(Temp,rad_ampl,rad_width):
+     dash.dependencies.Input('rad_width', 'value'),
+     dash.dependencies.Input('Isc', 'value'),
+     dash.dependencies.Input('Uoc', 'value'),
+     ])
+def update_figure(Temp,rad_ampl,rad_width,Isc,Uoc):
     #filtered_df = df[df.year == selected_year]
-    
     Sol= Solar()
-    Sol.calc_Pmpp(N_cells,Temp,rad_ampl,rad_width)
-    U,I = Sol.get_U_I()
+    #Sol.calc_Pmpp(N_cells,Temp,rad_ampl,rad_width)
+    #U,I = Sol.get_U_I()
     E=Sol.get_Rad(rad_ampl,rad_width)
     Cons=Consumer()
-    Cons.calc_power(Temp,rad_ampl,rad_width)
+    Cons.calc_power(Temp,rad_ampl,rad_width,Isc,Uoc)
     P_cons=Cons.get_power()
-    print(Temp)
-    P,Pmpp= Sol.get_P_Pmpp()
+    #print(Temp)
+    #P,Pmpp= Sol.get_P_Pmpp()
     
     traces = []
     trace1=(go.Scatter(
@@ -450,11 +485,15 @@ def update_figure(Temp,rad_ampl,rad_width):
      dash.dependencies.Input('capacity','value'),
      dash.dependencies.Input('Ambient_Temp', 'value'),
      dash.dependencies.Input('rad_ampl', 'value'),
-     dash.dependencies.Input('rad_width', 'value')])
-def update_Main(days_input,bat_capacity,Temp,rad_ampl,rad_width):
+     dash.dependencies.Input('rad_width', 'value'),
+     dash.dependencies.Input('Isc', 'value'),
+     dash.dependencies.Input('Uoc', 'value'),
+     dash.dependencies.Input('N_cells', 'value')])
+def update_Main(days_input,bat_capacity,Temp,rad_ampl,rad_width,Isc,Uoc,Ncells):
     #filtered_df = df[df.year == selected_year]
-    
-    days_input=int(days_input)
+    global N_cells
+    N_cells=float(Ncells)
+    days_input=float(days_input)
     if days_input > 5:
         days_input = 5
 
@@ -462,7 +501,7 @@ def update_Main(days_input,bat_capacity,Temp,rad_ampl,rad_width):
     Bat= Battery()
     
         
-    Bat.calc_SOC(d_hours,Temp,rad_ampl,rad_width,bat_capacity)
+    Bat.calc_SOC(d_hours,Temp,rad_ampl,rad_width,bat_capacity,Isc,Uoc)
     #Bat.Wmax = Bat.set_Wmax(bat_cap)
     #print(Bat.Wmax)
     E_Batt= Bat.get_stored_energy()
@@ -496,13 +535,19 @@ def update_Main(days_input,bat_capacity,Temp,rad_ampl,rad_width):
      dash.dependencies.Input('rad_width', 'value'),
      dash.dependencies.Input('days','value'),
      dash.dependencies.Input('cost_kwh', 'value'),
-     dash.dependencies.Input('solar_power', 'value')])
-def update_cost(cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh,solar_power):
+     dash.dependencies.Input('cost_wp', 'value'),
+     dash.dependencies.Input('Isc', 'value'),
+     dash.dependencies.Input('Uoc', 'value'),
+     dash.dependencies.Input('N_cells', 'value')])
+def update_cost(cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh,cost_wp,Isc,Uoc,Ncells):
     Cost=Costs()
-    Cost.calc_costs(Temp,rad_ampl,rad_width,days_input,cost_kwh, cap_bat, cost_bat,solar_power)
+    Sol=Solar()
+    Sol.calc_Pmpp(N_cells,Temp,rad_ampl,rad_width,Isc,Uoc)
+    sol_power=Sol.get_Pmax()
+    Cost.calc_costs(Temp,rad_ampl,rad_width,days_input,cost_kwh, cap_bat, cost_bat,sol_power,cost_wp,Isc,Uoc)
     grid_costs=Cost.total_costs
     solar_costs=Cost.total_costs_sol
-    print(days_input,'days')
+    #print(days_input,'days')
     
     
     
