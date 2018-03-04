@@ -129,8 +129,20 @@ class Solar():
         Pmax_vec=np.zeros(np.size(self.R))
         
         #T= self.get_Temp()
-        self.Uoc=float(Uoc)
-        self.Isc=float(Isc)
+        if float(Uoc)>0.7:
+            self.Uoc=0.7
+            corr_Uoc=Uoc/0.7
+        else:
+            self.Uoc=float(Uoc)
+            corr_Uoc=1
+        
+        if float(Isc)>1:
+            self.Isc=1
+            corr_Isc=float(Isc)/1
+        else:
+            self.Isc=float(Isc)
+            corr_Isc=1
+            
         E= self.get_Rad(rad_ampl,rad_width)
         #E=1000
         for e in range(E.shape[0]):
@@ -152,15 +164,16 @@ class Solar():
                     
                 k+=1
         
-            self.P=self.U*self.I*N_cells
+            self.P=self.U*self.I*N_cells*corr_Isc*corr_Uoc
             self.Pmpp[e]=np.max(self.P)
-        print(self.Pmpp)
+        #print(self.Pmpp)
         
         for i in range(np.size(self.R)):
             x= fsolve(self.solargen, 0.8, args=(self.R[i],self.Uoc,self.Isc,self.ktemp,1000,T))
-            Umax[i]=x
-            Imax[i]=x*self.R[i]
-            Pmax_vec[i]=Umax[i]*Imax[i]*N_cells
+            Imax[i]=x
+            Umax[i]=x*self.R[i]
+            Pmax_vec[i]=Umax[i]*Imax[i]*N_cells*corr_Isc*corr_Uoc    
+       # print(Pmax_vec)
         self.Pmax=np.max(Pmax_vec)
             
     
@@ -171,8 +184,9 @@ class Battery():
 #        C=Input_capacity.get()
         self.Wmax=100
         #self.stored_energy=np.zeros(np.size(t_ges))
-        self.stored_energy=np.full(np.size(t_ges),200)
+        self.stored_energy=np.zeros(np.size(t_ges))
         self.SOC=np.zeros(np.size(t_ges))
+        self.from_grid=np.zeros(np.size(t_ges))
         
         # unused energy
         self.W_unused=np.zeros(np.size(t_ges))
@@ -195,6 +209,10 @@ class Battery():
     def get_stored_energy(self):
         x=self.stored_energy
         return x
+    
+    def get_from_grid(self):
+        x=self.from_grid
+        return x
         
         
     def calc_SOC(self,t,T,rad_ampl,rad_width,bat_capacity,Isc,Uoc):
@@ -212,6 +230,7 @@ class Battery():
         
         for d in Input_days:  
             for i in t:
+                # battery is neither full nor empty and can be charged/discharged
                 if (self.stored_energy[i-1+t_len*d]+P_store[i]>=0) and (self.stored_energy[i-1+t_len*d]+P_store[i]<=self.Wmax): #charge
                 #Pmpp from solargen
                     self.stored_energy[i+t_len*d] = self.stored_energy[i-1+t_len*d] + P_store[i]
@@ -219,14 +238,15 @@ class Battery():
                     
                     
                 
-                
+                # battery empty and cannot be discharged
                 elif self.stored_energy[i-1+t_len*d]+P_store[i]<0:
                     self.stored_energy[i+t_len*d] = 0
                     self.W_unused[i+t_len*d]=self.W_unused[i-1+t_len*d]
+                    self.from_grid[i+t_len*d]=abs(P_store[i])
                     #print(i)
                     
                     
-                    
+                # battery full and cannot be charged    
                 elif self.stored_energy[i-1+t_len*d]+P_store[i]>self.Wmax:
                     #print(self.Wmax-self.stored_energy[i-1])
                     self.W_unused[i+t_len*d] = self.W_unused[i-1+t_len*d] + self.stored_energy[i-1+t_len*d]+P_store[i]-self.Wmax
@@ -263,8 +283,8 @@ class Consumer():
 class Costs():
     def __init__(self):
         #self.total_costs=np.zeros(d_len+1) # Costs must start at 0
-        self.total_costs=np.zeros(200)
-        self.total_costs_sol=np.zeros(200)
+        self.total_costs=np.zeros(5000)
+        self.total_costs_sol=np.zeros(5000)
         # self.battery_invest=100
         
     def battery_invest(self,capacity,cost_per_wh):
@@ -273,6 +293,7 @@ class Costs():
     
     def solar_invest(self,power,cost_per_wp):
         invest=float(power)*float(cost_per_wp)
+        print(power,'power')
         return invest
     
    # def solar_invest(self,cost_power,power):
@@ -286,10 +307,14 @@ class Costs():
         cost_kwh=float(cost_kwh)
         cost_battery=self.battery_invest(capacity,cost_bat)
         cost_solar=self.solar_invest(power,cost_per_wp)
+        print(cost_solar,'cost solar')
         Cons=Consumer()
         Cons.calc_power(T,rad_ampl,rad_width,Isc,Uoc)
         P_cons=Cons.get_power() #power req by consumer
-        P_diff_cons_sol=Cons.get_power_to_bat() #difference between consumer and solar power
+        #P_diff_cons_sol=Cons.get_power_to_bat() #difference between consumer and solar power
+        Bat=Battery()
+        Bat.calc_SOC(d_hours,T,rad_ampl,rad_width,capacity,Isc,Uoc)
+        pow_from_grid=Bat.get_from_grid()
         
         costs_per_day=cost_kwh*sum(P_cons)
         for i in range(num_d):
@@ -297,18 +322,18 @@ class Costs():
         #print (self.total_costs,'total costs')
         
         
-        #costs with solar
-        pow_from_grid=np.zeros(24) #power during day from grid if solar panel dont produce enough
         
-        for i in range(np.size(P_diff_cons_sol)):
-            if P_diff_cons_sol[i] <0:
-                pow_from_grid[i]=abs(P_diff_cons_sol[i])
+        #for i in range(np.size(P_diff_cons_sol)):
+           # if P_diff_cons_sol[i] <0:
+           #     pow_from_grid[i]=abs(P_diff_cons_sol[i])
+          
                
-                
-        costs_day_with_solar= cost_kwh*sum(pow_from_grid)
+        # only over one day so that each element in total costs represents 1 day        
+        cost_grid= cost_kwh*sum(pow_from_grid[0:24])
         for i in range(num_d+1):
-            self.total_costs_sol[i]=costs_day_with_solar*(i)+cost_solar+cost_battery
-        #print(self.total_costs_sol,'with sol')
+            self.total_costs_sol[i]=cost_grid*i+cost_solar+cost_battery
+            #print(self.total_costs_sol[i],'with sol')
+        
             
             
             
@@ -325,7 +350,7 @@ app.layout = html.Div([
             html.Div([
                 dcc.Graph(id='graph-with-slider'),
                 dcc.Graph(id='Main_graph')
-                    ],style={'width': '48%', 'display':'table-cell','verticalAlign': 'top'}),
+                    ],style={'width': '48%','height':'500px', 'display':'table-cell','verticalAlign': 'top'}),
         
              html.Div([
                     html.Div([
@@ -337,7 +362,7 @@ app.layout = html.Div([
                                                 html.Label('Number of Days',id='days_label'),
                                                 dcc.Input(id='days', value='2', type='text')],style=dict(display='table-cell')),
                                         html.Div([
-                                                html.Label('Battery Capacity [Wh]',id='cap_label'),
+                                                html.Label('Battery Capacity [kWh]',id='cap_label'),
                                                 dcc.Input(id='capacity', value='100', type='text')],style=dict(display='table-cell'))                   
                                 ],style={'display': 'table', })
                             ],style={'padding':'10px', 'border': 'thin solid grey'}),
@@ -346,13 +371,13 @@ app.layout = html.Div([
                                         html.H4('Costs')],style=dict(dispaly='block')),
                                 html.Div([
                                         html.Div([
-                                                html.Label('Battery [EUR/Wh]',id='cost_label'),
+                                                html.Label('Battery [EUR/kWh]',id='cost_label'),
                                                 dcc.Input(id='cost_bat', value='10', type='text')],style={'width':'30%','display':'table-cell'}),
                                         html.Div([
                                                 html.Label('Grid supply [EUR/kWh]',id='cost_label2'),
                                                 dcc.Input(id='cost_kwh', value='0.3', type='text')],style={'width':'30%','display':'table-cell'}),
                                         html.Div([
-                                                html.Label('Solar Panels [EUR/Wp]',id='cost_label3'),
+                                                html.Label('Solar Panels [EUR/kWp]',id='cost_label3'),
                                                 dcc.Input(id='cost_wp', value='200', type='text')],style={'width':'30%','display':'table-cell'}),
                                         ],style={'display': 'table'}),
                             ],style={'padding':'10px','border': 'thin solid grey'}),
@@ -363,9 +388,9 @@ app.layout = html.Div([
                                 html.Div([
                                         html.Div([
                                                 html.Label('Short Circuit Current [A]',id='Isc_label'),
-                                                dcc.Input(id='Isc', value='8', type='text')],style={'width':'30%','display':'table-cell'}),
+                                                dcc.Input(id='Isc', value='1', type='text')],style={'width':'30%','display':'table-cell'}),
                                         html.Div([
-                                                html.Label('Open circuit voltage',id='Uoc_label'),
+                                                html.Label('Open Circuit Voltage [V]',id='Uoc_label'),
                                                 dcc.Input(id='Uoc', value='0.6', type='text')],style={'width':'30%','display':'table-cell'}),
                                         html.Div([
                                                 html.Label('Number of cells',id='N_cells_label'),
@@ -500,28 +525,54 @@ def update_Main(days_input,bat_capacity,Temp,rad_ampl,rad_width,Isc,Uoc,Ncells):
     time(days_input)
     Bat= Battery()
     
-        
+    Sol=Solar()
+    Sol.calc_Pmpp(N_cells,Temp,rad_ampl,rad_width,Isc,Uoc) 
+    P,P_sol=Sol.get_P_Pmpp()
     Bat.calc_SOC(d_hours,Temp,rad_ampl,rad_width,bat_capacity,Isc,Uoc)
     #Bat.Wmax = Bat.set_Wmax(bat_cap)
     #print(Bat.Wmax)
     E_Batt= Bat.get_stored_energy()
+    E_grid=Bat.get_from_grid()
     
     traces = []
-    traces.append(go.Scatter(
+    traces1=(go.Scatter(
         x=t_ges,
         y=E_Batt,
+        name='W_stored',
         marker={
                 'size': 15,
                 'line': {'width': 0.5, 'color': 'white'}
                 },
     ))
+    traces2=(go.Scatter(
+        x=d_hours,
+        y= P_sol,
+        name='W_solar',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'blue'}
+                },
+    ))
+    traces3=(go.Scatter(
+        x=t_ges,
+        y= E_grid,
+        name='W_grid',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'green'}
+                },
+    ))
+    
+    traces=[traces1,traces2,traces3]
+    
 
     return {
         'data': traces,
         'layout': go.Layout(
-            title='Stored Energy in Battery',
+            title='Energy Overview',
             xaxis={'title': 'Time'},
-            yaxis={'title': 'Stored Energy [Wh]'}
+            yaxis={'title': 'Energy [Wh]'},
+            legend=dict(x=-.1, y=1.1, orientation = 'h')
         )
     }
     
@@ -542,8 +593,11 @@ def update_Main(days_input,bat_capacity,Temp,rad_ampl,rad_width,Isc,Uoc,Ncells):
 def update_cost(cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh,cost_wp,Isc,Uoc,Ncells):
     Cost=Costs()
     Sol=Solar()
-    Sol.calc_Pmpp(N_cells,Temp,rad_ampl,rad_width,Isc,Uoc)
+    Ncells=float(Ncells)
+    Sol.calc_Pmpp(Ncells,Temp,rad_ampl,rad_width,Isc,Uoc)
+    print(Ncells)
     sol_power=Sol.get_Pmax()
+    print(sol_power,'power2')
     Cost.calc_costs(Temp,rad_ampl,rad_width,days_input,cost_kwh, cap_bat, cost_bat,sol_power,cost_wp,Isc,Uoc)
     grid_costs=Cost.total_costs
     solar_costs=Cost.total_costs_sol
