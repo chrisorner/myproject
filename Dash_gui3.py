@@ -5,14 +5,9 @@ Created on Sat Nov  4 09:58:33 2017
 @author: Christian Orner
 """
 
-import tkinter as tk
-from tkinter import ttk
-import matplotlib
-matplotlib.use("TkAgg")
 
-from matplotlib import style
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
-from matplotlib.figure import Figure
+#from matplotlib import style
+#from matplotlib.figure import Figure
 import numpy as np
 np.set_printoptions(threshold=np.nan)
 from scipy.optimize import fsolve
@@ -22,7 +17,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
 
-style.use('ggplot')
+#style.use('ggplot')
 LARGE_FONT= ("Verdana", 12)
 
  # timestep for the SOC calculation
@@ -348,8 +343,16 @@ app.layout = html.Div([
                     'Solar Energy Calculator')]),
         html.Div([
             html.Div([
+                dcc.Dropdown(
+                        id='select_Graph',
+                        options=[
+                                {'label':'Radiation & Consumption', 'value':'rad_graph'},
+                                {'label':'Energy Overview', 'value':'power_graph'},
+                                {'label':'Costs', 'value':'cost_graph'}
+                                ]
+                        ),
+                
                 dcc.Graph(id='graph-with-slider'),
-                dcc.Graph(id='Main_graph')
                     ],style={'width': '48%','height':'500px', 'display':'table-cell','verticalAlign': 'top'}),
         
              html.Div([
@@ -431,13 +434,6 @@ app.layout = html.Div([
                 ),
     
     
-    
-        
-
-
-        html.Div([
-                   dcc.Graph(id='Cost_graph')]),
-    
         
 
 #'display': 'inline-block' 
@@ -446,140 +442,12 @@ app.layout = html.Div([
         
     ],style={'width': '100%', 'display': 'inline-block'})
 
-
-
+    
+    
 @app.callback(
     dash.dependencies.Output('graph-with-slider', 'figure'),
-    [dash.dependencies.Input('Ambient_Temp', 'value'),
-     dash.dependencies.Input('rad_ampl', 'value'),
-     dash.dependencies.Input('rad_width', 'value'),
-     dash.dependencies.Input('Isc', 'value'),
-     dash.dependencies.Input('Uoc', 'value'),
-     ])
-def update_figure(Temp,rad_ampl,rad_width,Isc,Uoc):
-    #filtered_df = df[df.year == selected_year]
-    Sol= Solar()
-    #Sol.calc_Pmpp(N_cells,Temp,rad_ampl,rad_width)
-    #U,I = Sol.get_U_I()
-    E=Sol.get_Rad(rad_ampl,rad_width)
-    Cons=Consumer()
-    Cons.calc_power(Temp,rad_ampl,rad_width,Isc,Uoc)
-    P_cons=Cons.get_power()
-    #print(Temp)
-    #P,Pmpp= Sol.get_P_Pmpp()
-    
-    traces = []
-    trace1=(go.Scatter(
-        x=d_hours,
-        y=E,
-        name = 'Radiation',
-        yaxis='y1',
-        marker={
-                'size': 15,
-                'line': {'width': 0.5, 'color': 'white'}
-                },
-    ))
-    trace2=(go.Scatter(
-        x=d_hours,
-        y=P_cons,
-        name='Consumption',
-        yaxis='y2',
-        marker={
-                'size': 15,
-                'line': {'width': 0.5, 'color': 'blue'}
-                },
-    ))
-    
-    traces=[trace1,trace2]
-
-    return {
-        'data': traces,
-        'layout': go.Layout(
-                title='Daily Radiation and Consumption',
-                xaxis={'title': 'Time'},
-                yaxis1={'title': 'Radiation [W/m2]', 'range':[0,1000]},
-                yaxis2={'title':'Consumption [W]','overlaying':'y','side':'right','range':[0,100]},
-                legend=dict(x=-.1, y=1.2)
-        )
-    }
-    
-    
-@app.callback(
-    dash.dependencies.Output('Main_graph', 'figure'),
-    [dash.dependencies.Input('days','value'),
-     dash.dependencies.Input('capacity','value'),
-     dash.dependencies.Input('Ambient_Temp', 'value'),
-     dash.dependencies.Input('rad_ampl', 'value'),
-     dash.dependencies.Input('rad_width', 'value'),
-     dash.dependencies.Input('Isc', 'value'),
-     dash.dependencies.Input('Uoc', 'value'),
-     dash.dependencies.Input('N_cells', 'value')])
-def update_Main(days_input,bat_capacity,Temp,rad_ampl,rad_width,Isc,Uoc,Ncells):
-    #filtered_df = df[df.year == selected_year]
-    global N_cells
-    N_cells=float(Ncells)
-    days_input=float(days_input)
-    if days_input > 5:
-        days_input = 5
-
-    time(days_input)
-    Bat= Battery()
-    
-    Sol=Solar()
-    Sol.calc_Pmpp(N_cells,Temp,rad_ampl,rad_width,Isc,Uoc) 
-    P,P_sol=Sol.get_P_Pmpp()
-    Bat.calc_SOC(d_hours,Temp,rad_ampl,rad_width,bat_capacity,Isc,Uoc)
-    #Bat.Wmax = Bat.set_Wmax(bat_cap)
-    #print(Bat.Wmax)
-    E_Batt= Bat.get_stored_energy()
-    E_grid=Bat.get_from_grid()
-    
-    traces = []
-    traces1=(go.Scatter(
-        x=t_ges,
-        y=E_Batt,
-        name='W_stored',
-        marker={
-                'size': 15,
-                'line': {'width': 0.5, 'color': 'white'}
-                },
-    ))
-    traces2=(go.Scatter(
-        x=d_hours,
-        y= P_sol,
-        name='W_solar',
-        marker={
-                'size': 15,
-                'line': {'width': 0.5, 'color': 'blue'}
-                },
-    ))
-    traces3=(go.Scatter(
-        x=t_ges,
-        y= E_grid,
-        name='W_grid',
-        marker={
-                'size': 15,
-                'line': {'width': 0.5, 'color': 'green'}
-                },
-    ))
-    
-    traces=[traces1,traces2,traces3]
-    
-
-    return {
-        'data': traces,
-        'layout': go.Layout(
-            title='Energy Overview',
-            xaxis={'title': 'Time'},
-            yaxis={'title': 'Energy [Wh]'},
-            legend=dict(x=-.1, y=1.1, orientation = 'h')
-        )
-    }
-    
-    
-@app.callback(
-    dash.dependencies.Output('Cost_graph', 'figure'),
-    [dash.dependencies.Input('cost_bat','value'),
+    [dash.dependencies.Input('select_Graph','value'),
+     dash.dependencies.Input('cost_bat','value'),
      dash.dependencies.Input('capacity','value'),
      dash.dependencies.Input('Ambient_Temp', 'value'),
      dash.dependencies.Input('rad_ampl', 'value'),
@@ -590,17 +458,36 @@ def update_Main(days_input,bat_capacity,Temp,rad_ampl,rad_width,Isc,Uoc,Ncells):
      dash.dependencies.Input('Isc', 'value'),
      dash.dependencies.Input('Uoc', 'value'),
      dash.dependencies.Input('N_cells', 'value')])
-def update_cost(cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh,cost_wp,Isc,Uoc,Ncells):
+def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh,cost_wp,Isc,Uoc,Ncells):
+    global N_cells
+    N_cells=float(Ncells)
+    days_input=float(days_input)
+    if days_input > 5 and sel_graph=='power_graph':
+        days_input = 5
+
+    time(days_input)
+    
     Cost=Costs()
     Sol=Solar()
     Ncells=float(Ncells)
     Sol.calc_Pmpp(Ncells,Temp,rad_ampl,rad_width,Isc,Uoc)
+    P,P_sol=Sol.get_P_Pmpp()
     print(Ncells)
     sol_power=Sol.get_Pmax()
     print(sol_power,'power2')
     Cost.calc_costs(Temp,rad_ampl,rad_width,days_input,cost_kwh, cap_bat, cost_bat,sol_power,cost_wp,Isc,Uoc)
     grid_costs=Cost.total_costs
     solar_costs=Cost.total_costs_sol
+    
+    Bat=Battery()
+    Bat.calc_SOC(d_hours,Temp,rad_ampl,rad_width,cap_bat,Isc,Uoc)
+    E_Batt= Bat.get_stored_energy()
+    E_grid=Bat.get_from_grid()
+    
+    E=Sol.get_Rad(rad_ampl,rad_width)
+    Cons=Consumer()
+    Cons.calc_power(Temp,rad_ampl,rad_width,Isc,Uoc)
+    P_cons=Cons.get_power()
     #print(days_input,'days')
     
     
@@ -618,16 +505,92 @@ def update_cost(cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh
         name='With Solar Panels',
     ))
     
+    trace3=(go.Scatter(
+        x=t_ges,
+        y=E_Batt,
+        name='W_stored',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'white'}
+                },
+    ))
+    trace4=(go.Scatter(
+        x=d_hours,
+        y= P_sol,
+        name='W_solar',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'blue'}
+                },
+    ))
+    trace5=(go.Scatter(
+        x=t_ges,
+        y= E_grid,
+        name='W_grid',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'green'}
+                },
+    ))
+    trace6=(go.Scatter(
+        x=d_hours,
+        y=E,
+        name = 'Radiation',
+        yaxis='y1',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'white'}
+                },
+    ))
+    trace7=(go.Scatter(
+        x=d_hours,
+        y=P_cons,
+        name='Consumption',
+        yaxis='y2',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'blue'}
+                },
+    ))
     
-    traces=[trace1,trace2]
-
-    return {
-        'data': traces,
+    
+    
+    
+    traces=[trace1,trace2,trace3, trace4, trace5, trace6, trace7]
+    
+    if sel_graph=='cost_graph':
+        return {
+            'data': traces[0:2],
+            'layout': go.Layout(
+                title='Cost Estimation',
+                xaxis={'title': 'Days'},
+                yaxis={'title': 'Costs [Eur]'},
+                legend=dict(x=-.1, y=1.2)
+            )
+        }
+        
+    elif sel_graph=='power_graph':
+        return {
+        'data': traces[2:5],
         'layout': go.Layout(
-            xaxis={'title': 'Days'},
-            yaxis={'title': 'Costs [Eur]'}
+            title='Energy Overview',
+            xaxis={'title': 'Time'},
+            yaxis={'title': 'Energy [Wh]'},
+            legend=dict(x=-.1, y=1.1, orientation = 'h')
         )
     }
+    else:
+        return {
+        'data': traces[5:7],
+        'layout': go.Layout(
+                title='Daily Radiation and Consumption',
+                xaxis={'title': 'Time'},
+                yaxis1={'title': 'Radiation [W/m2]', 'range':[0,1000]},
+                yaxis2={'title':'Consumption [W]','overlaying':'y','side':'right','range':[0,100]},
+                legend=dict(x=-.1, y=1.2)
+        )
+    }
+        
     
     
 
