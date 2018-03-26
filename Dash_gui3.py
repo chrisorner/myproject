@@ -5,24 +5,21 @@ Created on Sat Nov  4 09:58:33 2017
 @author: Christian Orner
 """
 
-import tkinter as tk
-from tkinter import ttk
-import matplotlib
-matplotlib.use("TkAgg")
 
-from matplotlib import style
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
-from matplotlib.figure import Figure
+#from matplotlib import style
+#from matplotlib.figure import Figure
 import numpy as np
 np.set_printoptions(threshold=np.nan)
 from scipy.optimize import fsolve
 
 import dash
+import dash_table_experiments as dt
 import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
+import pandas as pd
 
-style.use('ggplot')
+#style.use('ggplot')
 LARGE_FONT= ("Verdana", 12)
 
  # timestep for the SOC calculation
@@ -215,7 +212,7 @@ class Battery():
         return x
         
         
-    def calc_SOC(self,t,T,rad_ampl,rad_width,bat_capacity,Isc,Uoc):
+    def calc_SOC(self,t,T,rad_ampl,rad_width,bat_capacity,Isc,Uoc,cons_ener):
         
         #k=0
         # time counting after SOC=1
@@ -223,7 +220,7 @@ class Battery():
         #Pmpp=calc_Pmpp(Uoc, Isc, ktemp, E)
         self.Wmax=int(bat_capacity)
         Cons=Consumer()
-        Cons.calc_power(T,rad_ampl,rad_width,Isc,Uoc)
+        Cons.calc_power(T,rad_ampl,rad_width,Isc,Uoc,cons_ener)
         P_store=Cons.get_power_to_bat()
        # P, Pmpp=Solar.get_P_Pmpp()
         #consumer=0.8*Pmpp
@@ -271,8 +268,11 @@ class Consumer():
         x=self.P_diff
         return x
     
-    def calc_power(self,T,rad_ampl,rad_width,Isc,Uoc):
-        self.power = ([20,20,0,0,5,15,15,0,0,0,20,20,0,0,0,10,15,15,40,40,10,5,0,0])
+    def calc_power(self,T,rad_ampl,rad_width,Isc,Uoc,power):
+        #self.power = ([20,20,0,0,5,15,15,0,0,0,20,20,0,0,0,10,15,15,40,40,10,5,0,0])
+        #self.power=np.zeros(24)
+        
+        self.power= power
         Sol=Solar()
         Sol.calc_Pmpp(N_cells,T,rad_ampl,rad_width,Isc,Uoc)
         P, Pmpp=Sol.get_P_Pmpp()
@@ -301,7 +301,7 @@ class Costs():
         
         
          
-    def calc_costs(self,T,rad_ampl,rad_width,num_d,cost_kwh,capacity,cost_bat,power,cost_per_wp,Isc,Uoc):
+    def calc_costs(self,T,rad_ampl,rad_width,num_d,cost_kwh,capacity,cost_bat,power,cost_per_wp,Isc,Uoc,cons_ener):
         #100% grid supplly
         num_d=int(num_d)
         cost_kwh=float(cost_kwh)
@@ -309,11 +309,11 @@ class Costs():
         cost_solar=self.solar_invest(power,cost_per_wp)
         print(cost_solar,'cost solar')
         Cons=Consumer()
-        Cons.calc_power(T,rad_ampl,rad_width,Isc,Uoc)
+        Cons.calc_power(T,rad_ampl,rad_width,Isc,Uoc,cons_ener)
         P_cons=Cons.get_power() #power req by consumer
         #P_diff_cons_sol=Cons.get_power_to_bat() #difference between consumer and solar power
         Bat=Battery()
-        Bat.calc_SOC(d_hours,T,rad_ampl,rad_width,capacity,Isc,Uoc)
+        Bat.calc_SOC(d_hours,T,rad_ampl,rad_width,capacity,Isc,Uoc,cons_ener)
         pow_from_grid=Bat.get_from_grid()
         
         costs_per_day=cost_kwh*sum(P_cons)
@@ -343,15 +343,40 @@ class Costs():
     
 app = dash.Dash()
 
+DF_SIMPLE = pd.DataFrame({
+    'Hour':   [str(i) for i in range(1,25)],
+    'Energy Consumption [Wh]': [0 for i in range(1,25)]
+    },columns=['Hour','Energy Consumption [Wh]'])
+print(DF_SIMPLE)
+#DF_SIMPLE.set_index(keys='Hour',inplace=True)
+
 app.layout = html.Div([
         html.Div([html.H1(
                     'Solar Energy Calculator')]),
         html.Div([
             html.Div([
+                dcc.Dropdown(
+                        id='select_Graph',
+                        options=[
+                                {'label':'Radiation & Consumption', 'value':'rad_graph'},
+                                {'label':'Energy Overview', 'value':'power_graph'},
+                                {'label':'Costs', 'value':'cost_graph'}
+                                ]
+                        ),
+                
                 dcc.Graph(id='graph-with-slider'),
-                dcc.Graph(id='Main_graph')
+                html.H4('Editable DataTable'),
+                dt.DataTable(
+                    rows=DF_SIMPLE.to_dict('records'),
+            
+                    # optional - sets the order of columns
+                    #columns=sorted(DF_SIMPLE.columns),
+                    editable=True,
+                    id='editable-table'
+                )
                     ],style={'width': '48%','height':'500px', 'display':'table-cell','verticalAlign': 'top'}),
-        
+                
+                        
              html.Div([
                     html.Div([
                                 html.Div([
@@ -431,13 +456,6 @@ app.layout = html.Div([
                 ),
     
     
-    
-        
-
-
-        html.Div([
-                   dcc.Graph(id='Cost_graph')]),
-    
         
 
 #'display': 'inline-block' 
@@ -446,140 +464,12 @@ app.layout = html.Div([
         
     ],style={'width': '100%', 'display': 'inline-block'})
 
-
-
+    
+    
 @app.callback(
     dash.dependencies.Output('graph-with-slider', 'figure'),
-    [dash.dependencies.Input('Ambient_Temp', 'value'),
-     dash.dependencies.Input('rad_ampl', 'value'),
-     dash.dependencies.Input('rad_width', 'value'),
-     dash.dependencies.Input('Isc', 'value'),
-     dash.dependencies.Input('Uoc', 'value'),
-     ])
-def update_figure(Temp,rad_ampl,rad_width,Isc,Uoc):
-    #filtered_df = df[df.year == selected_year]
-    Sol= Solar()
-    #Sol.calc_Pmpp(N_cells,Temp,rad_ampl,rad_width)
-    #U,I = Sol.get_U_I()
-    E=Sol.get_Rad(rad_ampl,rad_width)
-    Cons=Consumer()
-    Cons.calc_power(Temp,rad_ampl,rad_width,Isc,Uoc)
-    P_cons=Cons.get_power()
-    #print(Temp)
-    #P,Pmpp= Sol.get_P_Pmpp()
-    
-    traces = []
-    trace1=(go.Scatter(
-        x=d_hours,
-        y=E,
-        name = 'Radiation',
-        yaxis='y1',
-        marker={
-                'size': 15,
-                'line': {'width': 0.5, 'color': 'white'}
-                },
-    ))
-    trace2=(go.Scatter(
-        x=d_hours,
-        y=P_cons,
-        name='Consumption',
-        yaxis='y2',
-        marker={
-                'size': 15,
-                'line': {'width': 0.5, 'color': 'blue'}
-                },
-    ))
-    
-    traces=[trace1,trace2]
-
-    return {
-        'data': traces,
-        'layout': go.Layout(
-                title='Daily Radiation and Consumption',
-                xaxis={'title': 'Time'},
-                yaxis1={'title': 'Radiation [W/m2]', 'range':[0,1000]},
-                yaxis2={'title':'Consumption [W]','overlaying':'y','side':'right','range':[0,100]},
-                legend=dict(x=-.1, y=1.2)
-        )
-    }
-    
-    
-@app.callback(
-    dash.dependencies.Output('Main_graph', 'figure'),
-    [dash.dependencies.Input('days','value'),
-     dash.dependencies.Input('capacity','value'),
-     dash.dependencies.Input('Ambient_Temp', 'value'),
-     dash.dependencies.Input('rad_ampl', 'value'),
-     dash.dependencies.Input('rad_width', 'value'),
-     dash.dependencies.Input('Isc', 'value'),
-     dash.dependencies.Input('Uoc', 'value'),
-     dash.dependencies.Input('N_cells', 'value')])
-def update_Main(days_input,bat_capacity,Temp,rad_ampl,rad_width,Isc,Uoc,Ncells):
-    #filtered_df = df[df.year == selected_year]
-    global N_cells
-    N_cells=float(Ncells)
-    days_input=float(days_input)
-    if days_input > 5:
-        days_input = 5
-
-    time(days_input)
-    Bat= Battery()
-    
-    Sol=Solar()
-    Sol.calc_Pmpp(N_cells,Temp,rad_ampl,rad_width,Isc,Uoc) 
-    P,P_sol=Sol.get_P_Pmpp()
-    Bat.calc_SOC(d_hours,Temp,rad_ampl,rad_width,bat_capacity,Isc,Uoc)
-    #Bat.Wmax = Bat.set_Wmax(bat_cap)
-    #print(Bat.Wmax)
-    E_Batt= Bat.get_stored_energy()
-    E_grid=Bat.get_from_grid()
-    
-    traces = []
-    traces1=(go.Scatter(
-        x=t_ges,
-        y=E_Batt,
-        name='W_stored',
-        marker={
-                'size': 15,
-                'line': {'width': 0.5, 'color': 'white'}
-                },
-    ))
-    traces2=(go.Scatter(
-        x=d_hours,
-        y= P_sol,
-        name='W_solar',
-        marker={
-                'size': 15,
-                'line': {'width': 0.5, 'color': 'blue'}
-                },
-    ))
-    traces3=(go.Scatter(
-        x=t_ges,
-        y= E_grid,
-        name='W_grid',
-        marker={
-                'size': 15,
-                'line': {'width': 0.5, 'color': 'green'}
-                },
-    ))
-    
-    traces=[traces1,traces2,traces3]
-    
-
-    return {
-        'data': traces,
-        'layout': go.Layout(
-            title='Energy Overview',
-            xaxis={'title': 'Time'},
-            yaxis={'title': 'Energy [Wh]'},
-            legend=dict(x=-.1, y=1.1, orientation = 'h')
-        )
-    }
-    
-    
-@app.callback(
-    dash.dependencies.Output('Cost_graph', 'figure'),
-    [dash.dependencies.Input('cost_bat','value'),
+    [dash.dependencies.Input('select_Graph','value'),
+     dash.dependencies.Input('cost_bat','value'),
      dash.dependencies.Input('capacity','value'),
      dash.dependencies.Input('Ambient_Temp', 'value'),
      dash.dependencies.Input('rad_ampl', 'value'),
@@ -589,18 +479,41 @@ def update_Main(days_input,bat_capacity,Temp,rad_ampl,rad_width,Isc,Uoc,Ncells):
      dash.dependencies.Input('cost_wp', 'value'),
      dash.dependencies.Input('Isc', 'value'),
      dash.dependencies.Input('Uoc', 'value'),
-     dash.dependencies.Input('N_cells', 'value')])
-def update_cost(cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh,cost_wp,Isc,Uoc,Ncells):
+     dash.dependencies.Input('N_cells', 'value'),
+     dash.dependencies.Input('editable-table', 'rows')])
+def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh,cost_wp,Isc,Uoc,Ncells,rows):
+    global N_cells
+    N_cells=float(Ncells)
+    days_input=float(days_input)
+    if days_input > 5 and sel_graph=='power_graph':
+        days_input = 5
+
+    time(days_input)
+    dff=pd.DataFrame(rows)
+    df_num=dff['Energy Consumption [Wh]'].convert_objects(convert_numeric=True)
+    df_num=df_num.as_matrix()
+    
     Cost=Costs()
     Sol=Solar()
     Ncells=float(Ncells)
     Sol.calc_Pmpp(Ncells,Temp,rad_ampl,rad_width,Isc,Uoc)
+    P,P_sol=Sol.get_P_Pmpp()
     print(Ncells)
     sol_power=Sol.get_Pmax()
     print(sol_power,'power2')
-    Cost.calc_costs(Temp,rad_ampl,rad_width,days_input,cost_kwh, cap_bat, cost_bat,sol_power,cost_wp,Isc,Uoc)
+    Cost.calc_costs(Temp,rad_ampl,rad_width,days_input,cost_kwh, cap_bat, cost_bat,sol_power,cost_wp,Isc,Uoc,df_num)
     grid_costs=Cost.total_costs
     solar_costs=Cost.total_costs_sol
+    
+    Bat=Battery()
+    Bat.calc_SOC(d_hours,Temp,rad_ampl,rad_width,cap_bat,Isc,Uoc,df_num)
+    E_Batt= Bat.get_stored_energy()
+    E_grid=Bat.get_from_grid()
+    
+    E=Sol.get_Rad(rad_ampl,rad_width)
+    Cons=Consumer()
+    Cons.calc_power(Temp,rad_ampl,rad_width,Isc,Uoc,df_num)
+    P_cons=Cons.get_power()
     #print(days_input,'days')
     
     
@@ -618,16 +531,92 @@ def update_cost(cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh
         name='With Solar Panels',
     ))
     
+    trace3=(go.Scatter(
+        x=t_ges,
+        y=E_Batt,
+        name='W_stored',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'white'}
+                },
+    ))
+    trace4=(go.Scatter(
+        x=d_hours,
+        y= P_sol,
+        name='W_solar',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'blue'}
+                },
+    ))
+    trace5=(go.Scatter(
+        x=t_ges,
+        y= E_grid,
+        name='W_grid',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'green'}
+                },
+    ))
+    trace6=(go.Scatter(
+        x=d_hours,
+        y=E,
+        name = 'Radiation',
+        yaxis='y1',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'white'}
+                },
+    ))
+    trace7=(go.Scatter(
+        x=d_hours,
+        y=P_cons,
+        name='Consumption',
+        yaxis='y2',
+        marker={
+                'size': 15,
+                'line': {'width': 0.5, 'color': 'blue'}
+                },
+    ))
     
-    traces=[trace1,trace2]
-
-    return {
-        'data': traces,
+    
+    
+    
+    traces=[trace1,trace2,trace3, trace4, trace5, trace6, trace7]
+    
+    if sel_graph=='cost_graph':
+        return {
+            'data': traces[0:2],
+            'layout': go.Layout(
+                title='Cost Estimation',
+                xaxis={'title': 'Days'},
+                yaxis={'title': 'Costs [Eur]'},
+                legend=dict(x=-.1, y=1.2)
+            )
+        }
+        
+    elif sel_graph=='power_graph':
+        return {
+        'data': traces[2:5],
         'layout': go.Layout(
-            xaxis={'title': 'Days'},
-            yaxis={'title': 'Costs [Eur]'}
+            title='Energy Overview',
+            xaxis={'title': 'Time'},
+            yaxis={'title': 'Energy [Wh]'},
+            legend=dict(x=-.1, y=1.1, orientation = 'h')
         )
     }
+    else:
+        return {
+        'data': traces[5:7],
+        'layout': go.Layout(
+                title='Daily Radiation and Consumption',
+                xaxis={'title': 'Time'},
+                yaxis1={'title': 'Radiation [W/m2]', 'range':[0,1000]},
+                yaxis2={'title':'Consumption [W]','overlaying':'y','side':'right','range':[0,100]},
+                legend=dict(x=-.1, y=1.2)
+        )
+    }
+        
     
     
 
@@ -638,201 +627,3 @@ def update_cost(cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh
 if __name__ == '__main__':
     app.run_server()
 
-    
-
-#class SeaofBTCapp(tk.Tk):
-#
-#    def __init__(self, *args, **kwargs):
-#        
-#        tk.Tk.__init__(self, *args, **kwargs)
-#        container = tk.Frame(self)
-#
-#        container.pack(side="top", fill="both", expand = True)
-#
-#        container.grid_rowconfigure(0, weight=1)
-#        container.grid_columnconfigure(0, weight=1)
-#        
-#        
-#
-#        self.frames = {}
-#
-#        for F in (StartPage, PageOne, PageTwo, PageThree):
-#            frame = F(container, self)
-#            self.frames[F] = frame
-#            frame.grid(row=0, column=0, sticky="nsew")
-#            
-#        self.show_frame(StartPage)
-#
-#    def show_frame(self, cont):
-#
-#        frame = self.frames[cont]
-#        frame.tkraise()
-#
-#        
-#class StartPage(tk.Frame):
-#
-#    def __init__(self, parent, controller):
-#        tk.Frame.__init__(self,parent)
-#        label = tk.Label(self, text="Start Page", font=LARGE_FONT)
-#        label.grid(row=1, column= 10)
-#        
-#        button = ttk.Button(self, text= 'Visit Page 1', command=lambda: controller.show_frame(PageOne))
-#        button.grid(row=5, column=5, sticky='WNSE')
-#       
-#        button2 = ttk.Button(self, text= 'Configure Solar Cells', command=lambda: controller.show_frame(PageTwo))
-#        button2.grid(row=6, column=5, sticky='WNSE')
-#       
-#        button3 = ttk.Button(self, text= 'Visit Graph Page', command=lambda: controller.show_frame(PageThree))
-#        button3.grid(row=7,column=5, sticky='NSEW')
-#        
-#class PageOne(tk.Frame):
-##
-#   def __init__(self, parent, controller):
-#        tk.Frame.__init__(self,parent)
-#        label = tk.Label(self, text="Page 1", font=LARGE_FONT)
-#        label.grid(row=1,column=2, columnspan=3)
-##        
-#        button = ttk.Button(self, text= 'Visit Start Page', command=lambda: controller.show_frame(StartPage))
-#        button.grid(row=2,column=5)
-##        
-#        button2 = ttk.Button(self, text= 'Configure Solar Cells', command=lambda: controller.show_frame(PageTwo))
-#        button2.grid(row=3, column=5)
-#        
-#class PageTwo(tk.Frame):
-#
-#    def __init__(self, parent, controller):
-#        global Isc
-#        global Uoc
-#        global ktemp
-#        
-#        tk.Frame.__init__(self,parent)
-#        toolbar_frame= tk.Frame(self)
-#        label = tk.Label(self, text="Configure Solar Cells", font=LARGE_FONT)
-#        label.grid(row=1,column=2, columnspan=3)
-#        
-#        button = ttk.Button(self, text= 'Go to Graph Page', command=lambda: controller.show_frame(PageThree))
-#        button.grid(row=2,column=1, sticky= 'WNSE')
-#        
-#        button2 = ttk.Button(self, text= 'Go to Start Page', width=20, command=lambda: controller.show_frame(StartPage))
-#        button2.grid(row=3,column=1, sticky='NSEW')
-#        
-#        Isc= tk.StringVar(self, value='1')
-#        input1=tk.Entry(self, textvariable=Isc)
-#        input1.grid(row=5,column=1)
-#        label1 = tk.Label(self, text="Isc")
-#        label1.grid(row=5, sticky= 'W')
-#        self.grid_rowconfigure(4,minsize=50)
-#        
-#        Uoc= tk.StringVar(self, value='0.8')
-#        input2=tk.Entry(self, textvariable=Uoc)
-#        input2.grid(row=6,column=1)
-#        label2 = tk.Label(self, text="Uoc")
-#        label2.grid(row=6, sticky= 'W')
-#        
-#        
-#        
-#        ktemp= tk.StringVar(self, value='0.3')
-#        input3=tk.Entry(self, textvariable=ktemp)
-#        input3.grid(row=7,column=1)
-#        label3 = tk.Label(self, text="ktemp")
-#        label3.grid(row=7, sticky= 'W')
-#        
-#        canvas= FigureCanvasTkAgg(f2, self)
-#        canvas.show()
-#        canvas.get_tk_widget().grid(row=6,column= 3)
-#        # toolbar needs to bee in seperate frame to use grid method       
-#        toolbar_frame.grid(row=7, column=3)
-#        toolbar_frame.tkraise()
-#        toolbar = NavigationToolbar2TkAgg(canvas, toolbar_frame)
-#        toolbar.update()
-#        
-#        plotbutton=tk.Button(master=self, text="update", command=lambda: plot_Solargen(canvas), height = 3, width = 15)
-#        plotbutton.grid(row=9,column=0)
-#        
-#        
-#        
-#        
-#class PageThree(tk.Frame):
-#
-#    def __init__(self, parent, controller):
-#        tk.Frame.__init__(self,parent)
-#        toolbar_frame= tk.Frame(self)
-#        label = tk.Label(self, text="Graph Page", font=LARGE_FONT)
-#        label.grid(row=1,column=2, columnspan=3)
-#        global Temp
-#        global Rad_ampl
-#        global Rad_width
-#        global Input_capacity
-#        global days
-#        
-#        
-#        
-#        button1 = ttk.Button(self, text= 'Back to Home', command=lambda: controller.show_frame(StartPage))
-#        button1.grid(row=1)
-#        
-#        
-#        # Temperature of solar panel
-#        Temp= tk.Scale(self, from_= 273, to= 350)
-#        Temp.grid(row=3, sticky = 'N')
-#        label = tk.Label(self, text="Ambient Temperature")
-#        label.grid(row=2)
-#        
-#        # changes amplitude of solar radiation     
-#        Rad_ampl= tk.Scale(self, from_= 0, to= 1000)
-#        Rad_ampl.grid(row=3, column=1, sticky = 'N')
-#        label = tk.Label(self, text="Solar radiation")
-#        label.grid(row=2,column=1)
-#        
-#        # changes width of solar radiation profile        
-#        Rad_width= tk.Scale(self, from_= 16, to= 80)
-#        Rad_width.grid(row=3, column=2, sticky = 'N')
-#        label = tk.Label(self, text="Duration")
-#        label.grid(row=2, column=2)
-#        
-#        # input capacity is taken in battery class
-#        Input_capacity= tk.StringVar(self, value='200')
-#        input1=tk.Entry(self, textvariable=Input_capacity)
-#        input1.grid(row=4,column=1)
-#        label1 = tk.Label(self, text="Battery Capacity [Wh]")
-#        label1.grid(row=4)
-#        
-#        # global varialble days is input for time function
-#        #changes viewed time range
-#        days= tk.StringVar(self, value='2')
-#        input2=tk.Entry(self, textvariable=days)
-#        input2.grid(row=5,column=1)
-#        label2 = tk.Label(self, text="Days to view")
-#        label2.grid(row=5)
-#        
-#        
-#        canvas= FigureCanvasTkAgg(f, self)
-#        canvas.show()
-#        canvas.get_tk_widget().grid(row=6,column= 3)
-#        # toolbar needs to bee in seperate frame to use grid method       
-#        toolbar_frame.grid(row=7, column=3)
-#        toolbar_frame.tkraise()
-#        toolbar = NavigationToolbar2TkAgg(canvas, toolbar_frame)
-#        toolbar.update()
-#        
-#        
-#        plotbutton=tk.Button(master=self, text="plot", command=lambda: plot_battery(canvas), height = 3, width = 15)
-#        plotbutton.grid(row=6,column=0)
-#        
-#        
-#            
-#
-#
-#app = SeaofBTCapp()
-#app.geometry("800x600")
-##ani = animation.FuncAnimation(f,animate, interval = 1000)
-#app.mainloop()
-    
-#a=Solar()
-#a.calc_Pmpp()
-#b,c=a.get_P_Pmpp()
-
-#print(b)
-
-
-
-    
