@@ -374,56 +374,58 @@ app.layout = html.Div([
                     editable=True,
                     id='editable-table'
                 )
-                    ],style={'width': '48%','height':'500px', 'display':'table-cell','verticalAlign': 'top'}),
+                    ],style={'height':'100px', 'display':'table-cell','verticalAlign': 'top', 'width':'60%'}),
                 
                         
              html.Div([
                     html.Div([
                                 html.Div([
-                                        html.H4('Some Parameter')],style=dict(dispaly='block')),
+                                        html.H4('Energy System')],style=dict(dispaly='block')),
     
-                                html.Div([
+                                html.Div([    
                                         html.Div([
-                                                html.Label('Number of Days',id='days_label'),
-                                                dcc.Input(id='days', value='2', type='text')],style=dict(display='table-cell')),
+                                                html.Div([html.Label('Number of Cells',id='N_cells_label')],style=dict(padding = '5px')),
+                                                dcc.Input(id='N_cells', value='1', type='text')],style={'padding-right':'20px','display':'table-cell'}),
                                         html.Div([
-                                                html.Label('Battery Capacity [kWh]',id='cap_label'),
-                                                dcc.Input(id='capacity', value='100', type='text')],style=dict(display='table-cell'))                   
-                                ],style={'display': 'table', })
+                                                html.Div([html.Label('Battery Capacity [kWh]',id='cap_label')],style=dict(padding = '5px')),
+                                                dcc.Input(id='capacity', value='100', type='text')],style=dict(width='40%',display='table-cell'))                   
+                                ],style={'display': 'table'})
                             ],style={'padding':'10px', 'border': 'thin solid grey'}),
-                    html.Div([
-                                html.Div([
-                                        html.H4('Costs')],style=dict(dispaly='block')),
-                                html.Div([
-                                        html.Div([
-                                                html.Label('Battery [EUR/kWh]',id='cost_label'),
-                                                dcc.Input(id='cost_bat', value='10', type='text')],style={'width':'30%','display':'table-cell'}),
-                                        html.Div([
-                                                html.Label('Grid supply [EUR/kWh]',id='cost_label2'),
-                                                dcc.Input(id='cost_kwh', value='0.3', type='text')],style={'width':'30%','display':'table-cell'}),
-                                        html.Div([
-                                                html.Label('Solar Panels [EUR/kWp]',id='cost_label3'),
-                                                dcc.Input(id='cost_wp', value='200', type='text')],style={'width':'30%','display':'table-cell'}),
-                                        ],style={'display': 'table'}),
-                            ],style={'padding':'10px','border': 'thin solid grey'}),
-                            
                     html.Div([
                                 html.Div([
                                         html.H4('Data Sheet Solar Panel')],style=dict(dispaly='block')),
                                 html.Div([
                                         html.Div([
-                                                html.Label('Short Circuit Current [A]',id='Isc_label'),
-                                                dcc.Input(id='Isc', value='1', type='text')],style={'width':'30%','display':'table-cell'}),
+                                                html.Div([html.Label('Short Circuit Current [A]',id='Isc_label')],style=dict(padding = '5px')),
+                                                dcc.Input(id='Isc', value='1', type='text')],style={'padding-right':'20px','width':'30%','display':'table-cell'}),
                                         html.Div([
-                                                html.Label('Open Circuit Voltage [V]',id='Uoc_label'),
-                                                dcc.Input(id='Uoc', value='0.6', type='text')],style={'width':'30%','display':'table-cell'}),
-                                        html.Div([
-                                                html.Label('Number of cells',id='N_cells_label'),
-                                                dcc.Input(id='N_cells', value='1', type='text')],style={'width':'30%','display':'table-cell'}),
-    
-                                        ],style={'display': 'table'}),
-                              ],style={'padding':'10px','border': 'thin solid grey'}),   
+                                                html.Div([html.Label('Open Circuit Voltage [V]',id='Uoc_label')],style=dict(padding = '5px')),
+                                                dcc.Input(id='Uoc', value='0.6', type='text')],style={'display':'table-cell'}),    
+                                        ],style={'display': 'table',}),
+                              ],style={'padding':'10px','border': 'thin solid grey'}),  
+                
                     html.Div([
+                                html.Div([
+                                        html.H4('Cost Data')],style=dict(dispaly='block')),
+                                html.Div([
+                                        html.Div([
+                                                html.Div([html.Label('Battery [EUR/kWh]',id='cost_label')],style=dict(padding = '5px')),
+                                                dcc.Input(id='cost_bat', value='10', type='text')],style={'padding-right':'20px','width':'30%','display':'table-cell'}),
+                                        html.Div([
+                                                html.Div([html.Label('Grid supply [EUR/kWh]',id='cost_label2')],style=dict(padding = '5px')),
+                                                dcc.Input(id='cost_kwh', value='0.3', type='text')],style={'padding-right':'20px','width':'30%','display':'table-cell'}),
+                                        html.Div([
+                                                html.Div([html.Label('Solar Panels [EUR/kWp]',id='cost_label3')],style=dict(padding = '5px')),
+                                                dcc.Input(id='cost_wp', value='200', type='text')],style={'width':'30%','display':'table-cell'}),
+                                        
+                                        ],style={'display': 'table'}),
+                            ],style={'padding':'10px','border': 'thin solid grey'}),
+                    html.Div([
+                                html.Label('Number of Days to View',id='days_label'),
+                                dcc.Input(id='days', value='2', type='text')],style={'padding':'10px'}),
+                       
+                    html.Div([  
+                                html.H4('Tune Solar Radiation'),
                                 html.P('Ambient Temperature [K]'),
                                 dcc.Slider(
                                     id='Ambient_Temp',
@@ -451,7 +453,7 @@ app.layout = html.Div([
                                     #step=None,
                                     marks={str(i): str(i) for i in range(20,80,10)}
                                         )],style={'padding': '20px','display': 'block'}
-                                )],style={'width': '48%', 'display':'table-cell','verticalAlign': 'top'}
+                                )],style={'display':'table-cell','verticalAlign': 'top','width':'30%'}
                         )],style=dict(display='table')
                 ),
     
@@ -462,7 +464,7 @@ app.layout = html.Div([
 #style={'width': '48%', 'float': 'right'} 
 
         
-    ],style={'width': '100%', 'display': 'inline-block'})
+    ])
 
     
     
@@ -625,5 +627,5 @@ def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_inp
 
 
 if __name__ == '__main__':
-    app.run_server()
+    app.run_server(debug=True)
 
