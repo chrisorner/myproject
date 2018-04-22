@@ -24,7 +24,7 @@ LARGE_FONT= ("Verdana", 12)
 
  # timestep for the SOC calculation
 t_step=1
-d_hours=np.arange(0,24,t_step)
+d_hours=np.arange(1,25,t_step)
 t_len=np.size(d_hours)
 
 N_cells=1
@@ -40,7 +40,7 @@ def time(days):
     days=int(float(days))
     Input_days=np.arange(0,days,1)            
     d_len=np.size(Input_days)
-    t_ges=np.arange(0,t_len*d_len,1)
+    t_ges=np.arange(1,t_len*d_len+1,1)
 
 class Solar():
     
@@ -225,8 +225,10 @@ class Battery():
        # P, Pmpp=Solar.get_P_Pmpp()
         #consumer=0.8*Pmpp
         
-        for d in Input_days:  
-            for i in t:
+        for d in Input_days:
+            #t: hours 1-24
+            #t_len: Number of days
+            for i in range(len(t)):
                 # battery is neither full nor empty and can be charged/discharged
                 if (self.stored_energy[i-1+t_len*d]+P_store[i]>=0) and (self.stored_energy[i-1+t_len*d]+P_store[i]<=self.Wmax): #charge
                 #Pmpp from solargen
@@ -278,7 +280,7 @@ class Consumer():
         P, Pmpp=Sol.get_P_Pmpp()
         
         for i in range(np.size(self.power)):
-            self.P_diff[i] = Pmpp[i]-self.power[i]
+            self.P_diff[i] = Pmpp[i]/1000-self.power[i]
             
 class Costs():
     def __init__(self):
@@ -287,13 +289,13 @@ class Costs():
         self.total_costs_sol=np.zeros(5000)
         # self.battery_invest=100
         
-    def battery_invest(self,capacity,cost_per_wh):
-        invest=float(cost_per_wh)*float(capacity)
+    def battery_invest(self,capacity,cost_per_kwh):
+        invest=float(cost_per_kwh)*float(capacity)
         return invest
     
-    def solar_invest(self,power,cost_per_wp):
-        invest=float(power)*float(cost_per_wp)
-        print(power,'power')
+    def solar_invest(self,power,cost_per_kwp):
+        # solar power in W but price per kwp
+        invest=float(power)/1000*float(cost_per_kwp)
         return invest
     
    # def solar_invest(self,cost_power,power):
@@ -301,13 +303,12 @@ class Costs():
         
         
          
-    def calc_costs(self,T,rad_ampl,rad_width,num_d,cost_kwh,capacity,cost_bat,power,cost_per_wp,Isc,Uoc,cons_ener):
+    def calc_costs(self,T,rad_ampl,rad_width,num_d,cost_kwh,capacity,cost_bat,power,cost_per_kwp,Isc,Uoc,cons_ener):
         #100% grid supplly
         num_d=int(num_d)
         cost_kwh=float(cost_kwh)
         cost_battery=self.battery_invest(capacity,cost_bat)
-        cost_solar=self.solar_invest(power,cost_per_wp)
-        print(cost_solar,'cost solar')
+        cost_solar=self.solar_invest(power,cost_per_kwp)
         Cons=Consumer()
         Cons.calc_power(T,rad_ampl,rad_width,Isc,Uoc,cons_ener)
         P_cons=Cons.get_power() #power req by consumer
@@ -345,9 +346,9 @@ app = dash.Dash()
 
 DF_SIMPLE = pd.DataFrame({
     'Hour':   [str(i) for i in range(1,25)],
-    'Energy Consumption [Wh]': [0 for i in range(1,25)]
-    },columns=['Hour','Energy Consumption [Wh]'])
-print(DF_SIMPLE)
+    #'Energy Consumption [kWh]': [0 for i in range(1,25)]
+    'Energy Consumption [kWh]': [0.2, 0.2, 0.2, 0.2, 0.2, 1, 1.5, 1, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 1.5, 1, 0.8, 0.8, 0.5, 0.2, 0.2]
+    },columns=['Hour','Energy Consumption [kWh]'])
 #DF_SIMPLE.set_index(keys='Hour',inplace=True)
 
 app.layout = html.Div([
@@ -385,10 +386,10 @@ app.layout = html.Div([
                                 html.Div([    
                                         html.Div([
                                                 html.Div([html.Label('Number of Cells',id='N_cells_label')],style=dict(padding = '5px')),
-                                                dcc.Input(id='N_cells', value='1', type='text')],style={'padding-right':'20px','display':'table-cell'}),
+                                                dcc.Input(id='N_cells', value='150', type='text')],style={'padding-right':'20px','display':'table-cell'}),
                                         html.Div([
                                                 html.Div([html.Label('Battery Capacity [kWh]',id='cap_label')],style=dict(padding = '5px')),
-                                                dcc.Input(id='capacity', value='100', type='text')],style=dict(width='40%',display='table-cell'))                   
+                                                dcc.Input(id='capacity', value='10', type='text')],style=dict(width='40%',display='table-cell'))                   
                                 ],style={'display': 'table'})
                             ],style={'padding':'10px', 'border': 'thin solid grey'}),
                     html.Div([
@@ -397,10 +398,10 @@ app.layout = html.Div([
                                 html.Div([
                                         html.Div([
                                                 html.Div([html.Label('Short Circuit Current [A]',id='Isc_label')],style=dict(padding = '5px')),
-                                                dcc.Input(id='Isc', value='1', type='text')],style={'padding-right':'20px','width':'30%','display':'table-cell'}),
+                                                dcc.Input(id='Isc', value='6', type='text')],style={'padding-right':'20px','width':'30%','display':'table-cell'}),
                                         html.Div([
                                                 html.Div([html.Label('Open Circuit Voltage [V]',id='Uoc_label')],style=dict(padding = '5px')),
-                                                dcc.Input(id='Uoc', value='0.6', type='text')],style={'display':'table-cell'}),    
+                                                dcc.Input(id='Uoc', value='0.67', type='text')],style={'display':'table-cell'}),    
                                         ],style={'display': 'table',}),
                               ],style={'padding':'10px','border': 'thin solid grey'}),  
                 
@@ -410,13 +411,13 @@ app.layout = html.Div([
                                 html.Div([
                                         html.Div([
                                                 html.Div([html.Label('Battery [EUR/kWh]',id='cost_label')],style=dict(padding = '5px')),
-                                                dcc.Input(id='cost_bat', value='10', type='text')],style={'padding-right':'20px','width':'30%','display':'table-cell'}),
+                                                dcc.Input(id='cost_bat', value='1000', type='text')],style={'padding-right':'20px','width':'30%','display':'table-cell'}),
                                         html.Div([
                                                 html.Div([html.Label('Grid supply [EUR/kWh]',id='cost_label2')],style=dict(padding = '5px')),
                                                 dcc.Input(id='cost_kwh', value='0.3', type='text')],style={'padding-right':'20px','width':'30%','display':'table-cell'}),
                                         html.Div([
                                                 html.Div([html.Label('Solar Panels [EUR/kWp]',id='cost_label3')],style=dict(padding = '5px')),
-                                                dcc.Input(id='cost_wp', value='200', type='text')],style={'width':'30%','display':'table-cell'}),
+                                                dcc.Input(id='cost_wp', value='600', type='text')],style={'width':'30%','display':'table-cell'}),
                                         
                                         ],style={'display': 'table'}),
                             ],style={'padding':'10px','border': 'thin solid grey'}),
@@ -492,7 +493,7 @@ def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_inp
 
     time(days_input)
     dff=pd.DataFrame(rows)
-    df_num=dff['Energy Consumption [Wh]'].convert_objects(convert_numeric=True)
+    df_num=dff['Energy Consumption [kWh]'].convert_objects(convert_numeric=True)
     df_num=df_num.as_matrix()
     
     Cost=Costs()
@@ -500,9 +501,9 @@ def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_inp
     Ncells=float(Ncells)
     Sol.calc_Pmpp(Ncells,Temp,rad_ampl,rad_width,Isc,Uoc)
     P,P_sol=Sol.get_P_Pmpp()
-    print(Ncells)
+    #print(Ncells)
     sol_power=Sol.get_Pmax()
-    print(sol_power,'power2')
+    #print(sol_power,'power2')
     Cost.calc_costs(Temp,rad_ampl,rad_width,days_input,cost_kwh, cap_bat, cost_bat,sol_power,cost_wp,Isc,Uoc,df_num)
     grid_costs=Cost.total_costs
     solar_costs=Cost.total_costs_sol
@@ -511,6 +512,7 @@ def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_inp
     Bat.calc_SOC(d_hours,Temp,rad_ampl,rad_width,cap_bat,Isc,Uoc,df_num)
     E_Batt= Bat.get_stored_energy()
     E_grid=Bat.get_from_grid()
+    #print(E_grid,'Grid')
     
     E=Sol.get_Rad(rad_ampl,rad_width)
     Cons=Consumer()
@@ -546,6 +548,7 @@ def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_inp
         x=d_hours,
         y= P_sol,
         name='W_solar',
+        yaxis='y2',
         marker={
                 'size': 15,
                 'line': {'width': 0.5, 'color': 'blue'}
@@ -603,7 +606,8 @@ def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_inp
         'layout': go.Layout(
             title='Energy Overview',
             xaxis={'title': 'Time'},
-            yaxis={'title': 'Energy [Wh]'},
+            yaxis1={'title': 'Energy [kWh]','rangemode':'tozero'},
+            yaxis2={'title':'Solar Power [W]','rangemode':'tozero','overlaying':'y','side':'right'},
             legend=dict(x=-.1, y=1.1, orientation = 'h')
         )
     }
@@ -614,18 +618,13 @@ def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_inp
                 title='Daily Radiation and Consumption',
                 xaxis={'title': 'Time'},
                 yaxis1={'title': 'Radiation [W/m2]', 'range':[0,1000]},
-                yaxis2={'title':'Consumption [W]','overlaying':'y','side':'right','range':[0,100]},
+                yaxis2={'title':'Consumption [kW]','overlaying':'y','side':'right','range':[0,10]},
                 legend=dict(x=-.1, y=1.2)
         )
     }
         
     
-    
-
-    
-    
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
-
+    app.run_server()
