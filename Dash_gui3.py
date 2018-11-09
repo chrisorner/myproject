@@ -166,7 +166,7 @@ class Solar():
         #print(self.Pmpp)
         
         for i in range(np.size(self.R)):
-            x= fsolve(self.solargen, 0.8, args=(self.R[i],self.Uoc,self.Isc,self.ktemp,1000,T))
+            x= fsolve(self.solargen, 0.8, args=(self.R[i],self.Uoc,self.Isc,self.ktemp,1000,293))
             Imax[i]=x
             Umax[i]=x*self.R[i]
             Pmax_vec[i]=Umax[i]*Imax[i]*N_cells*corr_Isc*corr_Uoc    
@@ -336,13 +336,14 @@ class Costs():
             #print(self.total_costs_sol[i],'with sol')
         
             
-            
-            
-
     
     
     
+### Start of the Application ####    
 app = dash.Dash()
+
+app.title = 'Energy Systems Simulator'
+app.css.append_css({'external_url': 'https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css'})
 
 DF_SIMPLE = pd.DataFrame({
     'Hour':   [str(i) for i in range(1,25)],
@@ -352,120 +353,115 @@ DF_SIMPLE = pd.DataFrame({
 #DF_SIMPLE.set_index(keys='Hour',inplace=True)
 
 app.layout = html.Div([
-        html.Div([html.H1(
-                    'Solar Energy Calculator')]),
+        
+        html.H1('Solar Energy Calculator'),
+        
         html.Div([
-            html.Div([
-                dcc.Dropdown(
-                        id='select_Graph',
-                        options=[
-                                {'label':'Radiation & Consumption', 'value':'rad_graph'},
-                                {'label':'Energy Overview', 'value':'power_graph'},
-                                {'label':'Costs', 'value':'cost_graph'}
-                                ]
-                        ),
-                
-                dcc.Graph(id='graph-with-slider'),
-                html.H4('Editable DataTable'),
-                dt.DataTable(
-                    rows=DF_SIMPLE.to_dict('records'),
-            
-                    # optional - sets the order of columns
-                    #columns=sorted(DF_SIMPLE.columns),
-                    editable=True,
-                    id='editable-table'
-                )
-                    ],style={'height':'100px', 'display':'table-cell','verticalAlign': 'top', 'width':'60%'}),
-                
-                        
-             html.Div([
+                html.Div([
+                    dcc.Dropdown(
+                            id='select_Graph',
+                            options=[
+                                    {'label':'Radiation & Consumption', 'value':'rad_graph'},
+                                    {'label':'Energy Overview', 'value':'power_graph'},
+                                    {'label':'Costs', 'value':'cost_graph'}
+                                    ])
+                        ],className='col-3')
+                ], className= 'row'),
+        html.Div([
+                    html.Div([                    
+                            dcc.Graph(id='graph-with-slider')],className='col-6'),
+                    
                     html.Div([
-                                html.Div([
-                                        html.H4('Energy System')],style=dict(dispaly='block')),
+                            html.Div([
+                                    html.H4('Energy System', className= 'col-12'),
+                                    html.Div([
+                                                html.Label('Number of Cells',id='N_cells_label'),
+                                                dcc.Input(id='N_cells', value='150', type='text')
+                                                ],className='col-4 offset-md-1'),
+                                    html.Div([ 
+                                                html.Label('Battery Capacity [kWh]',id='cap_label'),
+                                                dcc.Input(id='capacity', value='10', type='text')
+                                                ], className = 'col-4 offset-md-1')
+                                    ],className='row my-4'),
+                            html.Div([
+                                    html.H4('Data Sheet Solar Panel', className='col-12'),
+                                    html.Div([    
+                                        html.Label('Short Circuit Current [A]',id='Isc_label'),
+                                        dcc.Input(id='Isc', value='6', type='text'),
+                                            ],className='col-4 offset-md-1'),
+                                    html.Div([
+                                        html.Label('Open Circuit Voltage [V]',id='Uoc_label'),
+                                        dcc.Input(id='Uoc', value='0.67', type='text')
+                                            ],className='col-4 offset-md-1' )
+                                        ],className='row my-4'),
+                            html.Div([
+                                    html.H4('Cost Data',className='col-12'),
+                                    html.Div([
+                                            html.Label('Battery [EUR/kWh]',id='cost_label'),
+                                            dcc.Input(id='cost_bat', value='1000', type='text')
+                                        ],className= 'col-3'),
+                                    html.Div([
+                                            html.Label('Grid supply [EUR/kWh]',id='cost_label2'),
+                                            dcc.Input(id='cost_kwh', value='0.3', type='text')
+                                        ],className= 'col-3'),
+                                    html.Div([
+                                            html.Label('Solar Panels [EUR/kWp]',id='cost_label3'),
+                                            dcc.Input(id='cost_wp', value='600', type='text')
+                                        ],className= 'col-3'),
+                                    html.Div([
+                                            html.Label('Number of Days to View',id='days_label'),
+                                            dcc.Input(id='days', value='2', type='text')
+                                        ],className='col-3')
+                                    ],className='row my-4')
+                            ],className='col-6')
+                ], className = 'row'),
     
-                                html.Div([    
-                                        html.Div([
-                                                html.Div([html.Label('Number of Cells',id='N_cells_label')],style=dict(padding = '5px')),
-                                                dcc.Input(id='N_cells', value='150', type='text')],style={'padding-right':'20px','display':'table-cell'}),
-                                        html.Div([
-                                                html.Div([html.Label('Battery Capacity [kWh]',id='cap_label')],style=dict(padding = '5px')),
-                                                dcc.Input(id='capacity', value='10', type='text')],style=dict(width='40%',display='table-cell'))                   
-                                ],style={'display': 'table'})
-                            ],style={'padding':'10px', 'border': 'thin solid grey'}),
-                    html.Div([
-                                html.Div([
-                                        html.H4('Data Sheet Solar Panel')],style=dict(dispaly='block')),
-                                html.Div([
-                                        html.Div([
-                                                html.Div([html.Label('Short Circuit Current [A]',id='Isc_label')],style=dict(padding = '5px')),
-                                                dcc.Input(id='Isc', value='6', type='text')],style={'padding-right':'20px','width':'30%','display':'table-cell'}),
-                                        html.Div([
-                                                html.Div([html.Label('Open Circuit Voltage [V]',id='Uoc_label')],style=dict(padding = '5px')),
-                                                dcc.Input(id='Uoc', value='0.67', type='text')],style={'display':'table-cell'}),    
-                                        ],style={'display': 'table',}),
-                              ],style={'padding':'10px','border': 'thin solid grey'}),  
+        html.Div([
+                html.Div([
+                    html.H4('Editable DataTable'),
+                    dt.DataTable(
+                        rows=DF_SIMPLE.to_dict('records'),
                 
-                    html.Div([
-                                html.Div([
-                                        html.H4('Cost Data')],style=dict(dispaly='block')),
-                                html.Div([
-                                        html.Div([
-                                                html.Div([html.Label('Battery [EUR/kWh]',id='cost_label')],style=dict(padding = '5px')),
-                                                dcc.Input(id='cost_bat', value='1000', type='text')],style={'padding-right':'20px','width':'30%','display':'table-cell'}),
-                                        html.Div([
-                                                html.Div([html.Label('Grid supply [EUR/kWh]',id='cost_label2')],style=dict(padding = '5px')),
-                                                dcc.Input(id='cost_kwh', value='0.3', type='text')],style={'padding-right':'20px','width':'30%','display':'table-cell'}),
-                                        html.Div([
-                                                html.Div([html.Label('Solar Panels [EUR/kWp]',id='cost_label3')],style=dict(padding = '5px')),
-                                                dcc.Input(id='cost_wp', value='600', type='text')],style={'width':'30%','display':'table-cell'}),
-                                        
-                                        ],style={'display': 'table'}),
-                            ],style={'padding':'10px','border': 'thin solid grey'}),
-                    html.Div([
-                                html.Label('Number of Days to View',id='days_label'),
-                                dcc.Input(id='days', value='2', type='text')],style={'padding':'10px'}),
-                       
-                    html.Div([  
-                                html.H4('Tune Solar Radiation'),
-                                html.P('Ambient Temperature [K]'),
-                                dcc.Slider(
-                                    id='Ambient_Temp',
-                                    min=273,
-                                    max=353,
-                                    value=293,
-                                    step=None,
-                                    marks={i: str(i) for i in range(273,353,10)}
-                                ),
-                                html.P('Radiation Amplitude [W/m2]'),
-                                dcc.Slider(
-                                    id='rad_ampl',
-                                    min=0,
-                                    max=1000,
-                                    value=1000,
-                                    step=None,
-                                    marks={str(i): str(i) for i in range(0,1100,100)}
-                                        ),
-                                html.P('Scaling factor [-]'),
-                                dcc.Slider(
-                                    id='rad_width',
-                                    min=20,
-                                    max=80,
-                                    value=50,
-                                    #step=None,
-                                    marks={str(i): str(i) for i in range(20,80,10)}
-                                        )],style={'padding': '20px','display': 'block'}
-                                )],style={'display':'table-cell','verticalAlign': 'top','width':'30%'}
-                        )],style=dict(display='table')
-                ),
-    
-    
-        
-
-#'display': 'inline-block' 
-#style={'width': '48%', 'float': 'right'} 
-
-        
-    ])
+                        # optional - sets the order of columns
+                        #columns=sorted(DF_SIMPLE.columns),
+                        editable=True,
+                        id='editable-table')
+                    ],className='col-4'),
+                html.Div([
+                        html.H4('Tune Solar Radiation', className='col-12'),
+                        html.Div([
+                            html.P('Ambient Temperature [K]'),
+                            dcc.Slider(
+                                id='Ambient_Temp',
+                                min=273,
+                                max=353,
+                                value=293,
+                                step=None,
+                                marks={i: str(i) for i in range(273,353,10)}
+                        )],className='row mt-4 ml-3'),
+                        html.Div([
+                        html.P('Radiation Amplitude [W/m2]'),
+                        dcc.Slider(
+                            id='rad_ampl',
+                            min=0,
+                            max=1000,
+                            value=1000,
+                            step=None,
+                            marks={str(i): str(i) for i in range(0,1100,100)}
+                                )],className='row mt-4 ml-3'),
+                        html.Div([
+                            html.P('Scaling factor [-]'),
+                            dcc.Slider(
+                                id='rad_width',
+                                min=20,
+                                max=80,
+                                value=50,
+                                #step=None,
+                                marks={str(i): str(i) for i in range(20,80,10)})
+                                    ],className='row mt-4 ml-3')
+                            ], className= 'col-4 offset-md-2')
+                ],className= 'row'), 
+        ],className='mx-3')
 
     
     
@@ -503,7 +499,7 @@ def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_inp
     P,P_sol=Sol.get_P_Pmpp()
     #print(Ncells)
     sol_power=Sol.get_Pmax()
-    #print(sol_power,'power2')
+    print(sol_power,'power2')
     Cost.calc_costs(Temp,rad_ampl,rad_width,days_input,cost_kwh, cap_bat, cost_bat,sol_power,cost_wp,Isc,Uoc,df_num)
     grid_costs=Cost.total_costs
     solar_costs=Cost.total_costs_sol
