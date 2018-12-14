@@ -19,6 +19,10 @@ import dash_html_components as html
 import plotly.graph_objs as go
 import pandas as pd
 from flask_sqlalchemy import SQLAlchemy
+from flask import Flask
+
+
+
 
 #style.use('ggplot')
 LARGE_FONT= ("Verdana", 12)
@@ -339,11 +343,29 @@ class Costs():
 
 
 
+server= Flask(__name__)
+
+SQLALCHEMY_DATABASE_URI = "mysql+mysqlconnector://{username}:{password}@{hostname}/{databasename}".format(
+    username="chrisorn",
+    password="Handball",
+    hostname="chrisorn.mysql.pythonanywhere-services.com",
+    databasename="chrisorn$test",
+)
+server.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
+server.config["SQLALCHEMY_POOL_RECYCLE"] = 299
+server.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db = SQLAlchemy(server)
+
+class Comment(db.Model):
+
+    __tablename__ = "comments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    content = db.Column(db.String(4096))
 
 
-
-
-app = dash.Dash()
+app = dash.Dash(__name__, server=server)
 
 
 
@@ -626,17 +648,6 @@ def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_inp
         )
     }
 
-    SQLALCHEMY_DATABASE_URI = "mysql+mysqlconnector://{username}:{password}@{hostname}/{databasename}".format(
-        username="chrisorn",
-        password="Handball",
-        hostname="chrisorn.mysql.pythonanywhere-services.com",
-        databasename="chrisorn$test",
-    )
-    app.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
-    app.config["SQLALCHEMY_POOL_RECYCLE"] = 299
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
-    db = SQLAlchemy(app)
 
 
 if __name__ == '__main__':
