@@ -18,6 +18,9 @@ import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
 import pandas as pd
+from flask import Flask
+from flask_sqlalchemy import SQLAlchemy
+
 
 #style.use('ggplot')
 LARGE_FONT= ("Verdana", 12)
@@ -336,11 +339,37 @@ class Costs():
             #print(self.total_costs_sol[i],'with sol')
 
 
+server= Flask(__name__)
+
+SQLALCHEMY_DATABASE_URI = "mysql+mysqlconnector://{username}:{password}@{hostname}/{databasename}".format(
+    username="chrisorn",
+    password="Handball",
+    hostname="chrisorn.mysql.pythonanywhere-services.com",
+    databasename="chrisorn$test",
+)
+server.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
+server.config["SQLALCHEMY_POOL_RECYCLE"] = 299
+server.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db = SQLAlchemy(server)
+
+class SolarCell(db.Model):
+
+    __tablename__ = "Photovoltaik"
+
+    id = db.Column(db.Integer, primary_key=True)
+    type= db.Column(db.String(4096))
+    efficiency = db.Column(db.Float)
+
+    def __init__(self, id, type, efficiency):
+        self.id = id
+        self.type = type
+        self.efficiency= efficiency
 
 
 
 ### Start of the Application ####
-app = dash.Dash()
+app = dash.Dash(__name__, server=server)
 
 app.title = 'Energy Systems Simulator'
 app.css.append_css({'external_url': 'https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css'})
@@ -467,13 +496,39 @@ app.layout = html.Div([
                                     html.Div([
                                         html.Label('Type of Solar Panel',id='typeSP_label'),
                                         dcc.Input(id='typeSP', type='text', className= 'form-control'),
-                                            ],className='col-4 offset-md-1'),
+                                            ],className='col-3'),
                                     html.Div([
                                         html.Label('Efficiency',id='efficiencySP_label'),
                                         dcc.Input(id='efficiency', type='text', className= 'form-control')
-                                            ],className='col-4 offset-md-1' )
-                                        ],className='row my-4')
+                                            ],className='col-3'),
+                                    html.Div([
+                                        dcc.ConfirmDialogProvider(children= html.Button('Submit', id='button',
+                                        className='btn btn-primary'), id='confirm', message='Has been added')
+                                            ]),
+                                    html.P(id='placeholder'),
+                                        ],className='row my-4 align-items-end'),
+
         ],className='mx-3')
+
+
+@app.callback(
+    dash.dependencies.Output('placeholder','children'),
+   [dash.dependencies.Input('button','n_clicks')],
+     [dash.dependencies.State('typeSP', 'value'),
+     dash.dependencies.State('efficiency', 'value')])
+     #Button
+def update_db(n_clicks, typeSP, efficiency):
+    data= SolarCell.query.all()
+    last_id= data[-1].id
+    new_entry= SolarCell(last_id+1, typeSP, efficiency)
+    db.session.add(new_entry)
+    db.session.commit()
+
+
+@app.callback(dash.dependencies.Output('confirm', 'displayed'),
+              [dash.dependencies.Input('button', 'n_clicks')])
+def display_confirm(n_clicks):
+    return True
 
 
 
