@@ -503,9 +503,10 @@ app.layout = html.Div([
                                             ],className='col-3'),
                                     html.Div([
                                         dcc.ConfirmDialogProvider(children= html.Button('Submit', id='button',
-                                        className='btn btn-primary'), id='confirm', message='Has been added')
+                                        className='btn btn-primary'), id='confirm', message='Solar cell was added to database')
                                             ]),
                                     html.P(id='placeholder'),
+                                    html.Div(id='output-provider')
                                         ],className='row my-4 align-items-end'),
 
         ],className='mx-3')
@@ -525,10 +526,10 @@ def update_db(n_clicks, typeSP, efficiency):
     db.session.commit()
 
 
-@app.callback(dash.dependencies.Output('confirm', 'displayed'),
-              [dash.dependencies.Input('button', 'n_clicks')])
-def display_confirm(n_clicks):
-    return True
+@app.callback(dash.dependencies.Output('output-provider', 'children'),
+              [dash.dependencies.Input('confirm', 'submit_n_clicks')])
+def display_confirm(submit_n_clicks):
+    return ''
 
 
 
