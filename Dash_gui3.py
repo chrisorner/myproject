@@ -13,7 +13,7 @@ np.set_printoptions(threshold=np.nan)
 from scipy.optimize import fsolve
 
 import dash
-import dash_table_experiments as dt
+import dash_table as dt
 import dash_core_components as dcc
 import dash_html_components as html
 import plotly.graph_objs as go
@@ -341,12 +341,20 @@ class Costs():
 
 server= Flask(__name__)
 
+#SQLALCHEMY_DATABASE_URI = "mysql+mysqlconnector://{username}:{password}@{hostname}/{databasename}".format(
+#    username="chrisorn",
+ #   password="Handball",
+#    hostname="chrisorn.mysql.pythonanywhere-services.com",
+#    databasename="chrisorn$test",
+#)
 SQLALCHEMY_DATABASE_URI = "mysql+mysqlconnector://{username}:{password}@{hostname}/{databasename}".format(
-    username="chrisorn",
+    username="root",
     password="Handball",
-    hostname="chrisorn.mysql.pythonanywhere-services.com",
-    databasename="chrisorn$test",
-)
+    hostname="localhost",
+    databasename="energyapp",
+) 
+ 
+ 
 server.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
 server.config["SQLALCHEMY_POOL_RECYCLE"] = 299
 server.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -358,7 +366,7 @@ class SolarCell(db.Model):
     __tablename__ = "Photovoltaik"
 
     id = db.Column(db.Integer, primary_key=True)
-    type= db.Column(db.String(4096))
+    type= db.Column(db.String(30))
     efficiency = db.Column(db.Float)
 
     def __init__(self, id, type, efficiency):
@@ -374,7 +382,7 @@ app = dash.Dash(__name__, server=server)
 app.title = 'Energy Systems Simulator'
 app.css.append_css({'external_url': 'https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css'})
 
-DF_SIMPLE = pd.DataFrame({
+df = pd.DataFrame({
     'Hour':   [str(i) for i in range(1,25)],
     #'Energy Consumption [kWh]': [0 for i in range(1,25)]
     'Energy Consumption [kWh]': [0.2, 0.2, 0.2, 0.2, 0.2, 1, 1.5, 1, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 1.5, 1, 0.8, 0.8, 0.5, 0.2, 0.2]
@@ -449,8 +457,8 @@ app.layout = html.Div([
                 html.Div([
                     html.H4('Editable DataTable'),
                     dt.DataTable(
-                        rows=DF_SIMPLE.to_dict('records'),
-
+                        columns=[{"name": i, "id": i} for i in df.columns],
+                        data=df.to_dict("records"),
                         # optional - sets the order of columns
                         #columns=sorted(DF_SIMPLE.columns),
                         editable=True,
@@ -514,14 +522,17 @@ app.layout = html.Div([
 
 @app.callback(
     dash.dependencies.Output('placeholder','children'),
-   [dash.dependencies.Input('button','n_clicks')],
+   [dash.dependencies.Input('confirm', 'submit_n_clicks')],
      [dash.dependencies.State('typeSP', 'value'),
      dash.dependencies.State('efficiency', 'value')])
      #Button
-def update_db(n_clicks, typeSP, efficiency):
-    data= SolarCell.query.all()
-    last_id= data[-1].id
-    new_entry= SolarCell(last_id+1, typeSP, efficiency)
+def update_db(submit_n_clicks, typeSP, effic):
+    #data= SolarCell.query.all()
+    #last_id= data[-1].id
+    #last_id=0
+    print(effic)
+    print(typeSP)
+    new_entry= SolarCell(None, typeSP, effic)
     db.session.add(new_entry)
     db.session.commit()
 
@@ -547,7 +558,7 @@ def display_confirm(submit_n_clicks):
      dash.dependencies.Input('Isc', 'value'),
      dash.dependencies.Input('Uoc', 'value'),
      dash.dependencies.Input('N_cells', 'value'),
-     dash.dependencies.Input('editable-table', 'rows')])
+     dash.dependencies.Input('editable-table', 'data')])
 def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh,cost_wp,Isc,Uoc,Ncells,rows):
     global N_cells
     N_cells=float(Ncells)
@@ -557,7 +568,7 @@ def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_inp
 
     time(days_input)
     dff=pd.DataFrame(rows)
-    df_num=dff['Energy Consumption [kWh]'].convert_objects(convert_numeric=True)
+    df_num=pd.to_numeric(dff['Energy Consumption [kWh]'])
     df_num=df_num.as_matrix()
 
     Cost=Costs()
