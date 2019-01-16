@@ -20,6 +20,9 @@ import plotly.graph_objs as go
 import pandas as pd
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+import requests
+from geopy.geocoders import Nominatim
+from get_local_rad import create_rad
 
 
 #style.use('ggplot')
@@ -33,6 +36,7 @@ t_len=np.size(d_hours)
 N_cells=1
 
 #days are gui input
+###setup time vectors dependend on days input
 def time(days):
     global Input_days
     global t_ges
@@ -47,20 +51,13 @@ def time(days):
 
 class Solar():
 
+    # Simple equivalent circuit model that is used to calculate U-I curve of solar cell
     def __init__(self):
 
- #       U_oc=0.7 #get Uoc from gui input
-#       self.Uoc= float(U_oc)
-#        I_sc=1
-        # Does not change the graph much
-#       self.Isc= float(I_sc)
         self.Uoc=0
         self.Isc=0
         self.ktemp= 0.3
-        #self.R= np.arange(0.1,3,0.1) takes to long to compute
         self.R= np.array([0.1,0.2,0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 3])
-    #zeros(row,columns)
-        #self.I=np.zeros([np.size(self.get_Rad()),np.size(self.R)])
         self.I=np.zeros(np.size(self.R))
         self.U=np.zeros(np.size(self.R))
         self.I_plot=np.zeros(np.size(self.R))
@@ -68,20 +65,15 @@ class Solar():
 
 
         self.P=np.zeros(np.size(self.R))
-        #self.U=np.zeros([np.size(self.get_Rad()),np.size(self.R)])
-        #self.P=np.zeros([np.size(self.get_Rad()),np.size(self.R)])
         self.Pmpp=np.zeros(np.size(d_hours))
         self.Pmax=0
-#E= 600
-#T= 350
 
     def solargen(self,I,R,Uoc,Isc,ktemp,E,T):
-        #R=4
+    
         k= 1.38*10**(-23)
         q=1.602*10**(-19)
         UT= k*T/q
         const= float(Isc)/1000
-        #print(UT)
 
 
         Iph= E*const
@@ -89,18 +81,15 @@ class Solar():
         #print(Uoc_T)
         I0=self.Isc/(np.exp(Uoc_T/UT)-1)
         y=Iph-I0*(np.exp((I*R)/UT)-1)-I
-        #print(np.exp(Uoc_T/UT)-1)
+
         return y
 
-#    def get_Temp(self):
-#        y=Temp.get()
-#        return y
 
     def get_Rad(self,rad_ampl,rad_width):
- #       a=Rad_width.get()
+        # !! Not used anymore because radiation comes from API!!
+        #Calculates radiation from GUI input
         a=rad_width
         y= rad_ampl
- #       y=10
         Rad= np.zeros(np.size(d_hours))
         for i in range(np.size(d_hours)):
             Rad[i]= (-a)*(d_hours[i]-14)**2+y
@@ -123,12 +112,14 @@ class Solar():
         return x
 
 
-    def calc_Pmpp(self,N_cells,T,rad_ampl,rad_width,Isc,Uoc):
+    def calc_Pmpp(self,N_cells,T,loc_rad,Isc,Uoc):
+    # find the point on U-I curve with maximum power, mpp = maximum power point
+        
         Umax=np.zeros(np.size(self.R))
         Imax=np.zeros(np.size(self.R))
         Pmax_vec=np.zeros(np.size(self.R))
 
-        #T= self.get_Temp()
+       # Uoc and Isc must be between upper and lower bound for equation to work
         if float(Uoc)>0.7:
             self.Uoc=0.7
             corr_Uoc=Uoc/0.7
@@ -142,21 +133,22 @@ class Solar():
         else:
             self.Isc=float(Isc)
             corr_Isc=1
-
-        E= self.get_Rad(rad_ampl,rad_width)
-        #E=1000
-        for e in range(E.shape[0]):
-            #print(E.shape[0])
+        E= loc_rad
+        
+        
+        for e in range(len(E)):
+    
             k=0
             l=0
+            #R is vector of resistances to get points on U-I curve
             for i in self.R:
                 x= fsolve(self.solargen, 0.8, args=(i,self.Uoc,self.Isc,self.ktemp,E[e],T))
-                #I[row,column]
-                #print(x)
+                
                 self.I[k]=x
                 self.U[k]=x*i
 
                 # save I and U for the peak radiation to plot UI curve
+                # This assumes that maximum power is obtained at 14:00
                 if e == 14:
                     self.I_plot[l]=x
                     self.U_plot[l]=x*i
@@ -166,29 +158,24 @@ class Solar():
 
             self.P=self.U*self.I*N_cells*corr_Isc*corr_Uoc
             self.Pmpp[e]=np.max(self.P)
-        #print(self.Pmpp)
 
         for i in range(np.size(self.R)):
+            #Solves the solar cell model and returns the max power
             x= fsolve(self.solargen, 0.8, args=(self.R[i],self.Uoc,self.Isc,self.ktemp,1000,293))
             Imax[i]=x
             Umax[i]=x*self.R[i]
             Pmax_vec[i]=Umax[i]*Imax[i]*N_cells*corr_Isc*corr_Uoc
-       # print(Pmax_vec)
         self.Pmax=np.max(Pmax_vec)
 
 
 class Battery():
     def __init__(self):
         # maximum storage capacity in Wh
-        # input from gui
-#        C=Input_capacity.get()
+        # Wmax only initialized, input from gui
         self.Wmax=100
-        #self.stored_energy=np.zeros(np.size(t_ges))
         self.stored_energy=np.zeros(np.size(t_ges))
         self.SOC=np.zeros(np.size(t_ges))
         self.from_grid=np.zeros(np.size(t_ges))
-
-        # unused energy
         self.W_unused=np.zeros(np.size(t_ges))
 
 
@@ -196,13 +183,9 @@ class Battery():
         x=self.SOC
         return x
 
-#    def set_Wmax(self,capacity):
-#
-#        battery_capacity=int(capacity)
-
-
 
     def get_W_unused(self):
+        #Energy which is not used or stored
         x= self.W_unused
         return x
 
@@ -215,18 +198,13 @@ class Battery():
         return x
 
 
-    def calc_SOC(self,t,T,rad_ampl,rad_width,bat_capacity,Isc,Uoc,cons_ener):
-
-        #k=0
-        # time counting after SOC=1
-        #t_lost=1
-        #Pmpp=calc_Pmpp(Uoc, Isc, ktemp, E)
+    def calc_SOC(self,t,T,loc_rad,bat_capacity,Isc,Uoc,cons_ener):
+        #Wmax input from GUI
         self.Wmax=int(bat_capacity)
-        Cons=Consumer()
-        Cons.calc_power(T,rad_ampl,rad_width,Isc,Uoc,cons_ener)
-        P_store=Cons.get_power_to_bat()
-       # P, Pmpp=Solar.get_P_Pmpp()
-        #consumer=0.8*Pmpp
+        Cons=Consumer() #Energy that is consumed
+        Cons.calc_power(T,loc_rad,Isc,Uoc,cons_ener)
+        P_store=Cons.get_power_to_bat() #Power that goes into battery
+       
 
         for d in Input_days:
             #t: hours 1-24
@@ -259,7 +237,7 @@ class Battery():
 
 
 class Consumer():
-
+    # Energy that is used by consumer
     def __init__(self):
         self.power = np.zeros(np.size(d_hours))
         self.P_diff=np.zeros(np.size(d_hours))
@@ -273,13 +251,11 @@ class Consumer():
         x=self.P_diff
         return x
 
-    def calc_power(self,T,rad_ampl,rad_width,Isc,Uoc,power):
-        #self.power = ([20,20,0,0,5,15,15,0,0,0,20,20,0,0,0,10,15,15,40,40,10,5,0,0])
-        #self.power=np.zeros(24)
+    def calc_power(self,T,loc_rad,Isc,Uoc,power):
 
         self.power= power
         Sol=Solar()
-        Sol.calc_Pmpp(N_cells,T,rad_ampl,rad_width,Isc,Uoc)
+        Sol.calc_Pmpp(N_cells,T,loc_rad,Isc,Uoc)
         P, Pmpp=Sol.get_P_Pmpp()
 
         for i in range(np.size(self.power)):
@@ -287,10 +263,8 @@ class Consumer():
 
 class Costs():
     def __init__(self):
-        #self.total_costs=np.zeros(d_len+1) # Costs must start at 0
         self.total_costs=np.zeros(5000)
         self.total_costs_sol=np.zeros(5000)
-        # self.battery_invest=100
 
     def battery_invest(self,capacity,cost_per_kwh):
         invest=float(cost_per_kwh)*float(capacity)
@@ -301,45 +275,39 @@ class Costs():
         invest=float(power)/1000*float(cost_per_kwp)
         return invest
 
-   # def solar_invest(self,cost_power,power):
 
 
-
-
-    def calc_costs(self,T,rad_ampl,rad_width,num_d,cost_kwh,capacity,cost_bat,power,cost_per_kwp,Isc,Uoc,cons_ener):
-        #100% grid supplly
+    def calc_costs(self,T,rad_loc,num_d,cost_kwh,capacity,cost_bat,power,cost_per_kwp,Isc,Uoc,cons_ener):
+        #calculate total cost battery + solar cells + energy from grid
         num_d=int(num_d)
         cost_kwh=float(cost_kwh)
         cost_battery=self.battery_invest(capacity,cost_bat)
         cost_solar=self.solar_invest(power,cost_per_kwp)
         Cons=Consumer()
-        Cons.calc_power(T,rad_ampl,rad_width,Isc,Uoc,cons_ener)
+        Cons.calc_power(T,rad_loc,Isc,Uoc,cons_ener)
         P_cons=Cons.get_power() #power req by consumer
-        #P_diff_cons_sol=Cons.get_power_to_bat() #difference between consumer and solar power
+        
         Bat=Battery()
-        Bat.calc_SOC(d_hours,T,rad_ampl,rad_width,capacity,Isc,Uoc,cons_ener)
+        Bat.calc_SOC(d_hours,T,rad_loc,capacity,Isc,Uoc,cons_ener)
         pow_from_grid=Bat.get_from_grid()
 
         costs_per_day=cost_kwh*sum(P_cons)
         for i in range(num_d):
             self.total_costs[i+1]=costs_per_day*(i+1)
-        #print (self.total_costs,'total costs')
-
-
-
-        #for i in range(np.size(P_diff_cons_sol)):
-           # if P_diff_cons_sol[i] <0:
-           #     pow_from_grid[i]=abs(P_diff_cons_sol[i])
 
 
         # only over one day so that each element in total costs represents 1 day
         cost_grid= cost_kwh*sum(pow_from_grid[0:24])
         for i in range(num_d+1):
             self.total_costs_sol[i]=cost_grid*i+cost_solar+cost_battery
-            #print(self.total_costs_sol[i],'with sol')
 
+## End of Calculations ###
 
+##Start of Web Application##
 server= Flask(__name__)
+
+## connect to SQL Database
+# 1 is for localhost, 1 for deployed app
 
 #SQLALCHEMY_DATABASE_URI = "mysql+mysqlconnector://{username}:{password}@{hostname}/{databasename}".format(
 #    username="chrisorn",
@@ -373,6 +341,8 @@ class SolarCell(db.Model):
         self.id = id
         self.type = type
         self.efficiency= efficiency
+        
+## End of SQL stuff        
 
 
 
@@ -382,17 +352,16 @@ app = dash.Dash(__name__, server=server)
 app.title = 'Energy Systems Simulator'
 app.css.append_css({'external_url': 'https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css'})
 
+# Initialize  user consumption
 df = pd.DataFrame({
     'Hour':   [str(i) for i in range(1,25)],
-    #'Energy Consumption [kWh]': [0 for i in range(1,25)]
     'Energy Consumption [kWh]': [0.2, 0.2, 0.2, 0.2, 0.2, 1, 1.5, 1, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 1.5, 1, 0.8, 0.8, 0.5, 0.2, 0.2]
     },columns=['Hour','Energy Consumption [kWh]'])
-#DF_SIMPLE.set_index(keys='Hour',inplace=True)
 
+    ## GUI is created here
 app.layout = html.Div([
 
         html.H1('Solar Energy Calculator'),
-
         html.Div([
                 html.Div([
                     dcc.Dropdown(
@@ -455,10 +424,12 @@ app.layout = html.Div([
 
         html.Div([
                 html.Div([
-                    html.H4('Editable DataTable'),
+                    html.H4('Energy Consumption Over Day'),
                     dt.DataTable(
                         columns=[{"name": i, "id": i} for i in df.columns],
                         data=df.to_dict("records"),
+                        n_fixed_rows=1,
+                        style_table={'maxHeight': '300', 'overflowY': 'scroll'},
                         # optional - sets the order of columns
                         #columns=sorted(DF_SIMPLE.columns),
                         editable=True,
@@ -466,6 +437,13 @@ app.layout = html.Div([
                     ],className='col-4'),
                 html.Div([
                         html.H4('Tune Solar Radiation', className='col-12'),
+                        html.Div([
+                                html.Div([html.Label('Location',id='location_label'),
+                                          dcc.Input(id='location', type='text', className= 'form-control')
+                                          ],className= 'col-7'),
+                                html.Div([html.Button('Submit', id='button_loc', className='btn btn-primary')]),
+                                dcc.Input(id='output-provider2', type='hidden')
+                                ], className= 'row mt-4 ml-3 align-items-end'),
                         html.Div([
                             html.P('Ambient Temperature [K]'),
                             dcc.Slider(
@@ -519,19 +497,24 @@ app.layout = html.Div([
 
         ],className='mx-3')
 
+@app.callback(
+        dash.dependencies.Output('output-provider2','value'),
+        [dash.dependencies.Input('button_loc', 'n_clicks')],
+        [dash.dependencies.State('location', 'value')])
+
+def get_loc_rad(n_clicks, loc):
+    # get the radiation for location
+    time,rad= create_rad(loc)
+    return rad
 
 @app.callback(
     dash.dependencies.Output('placeholder','children'),
    [dash.dependencies.Input('confirm', 'submit_n_clicks')],
      [dash.dependencies.State('typeSP', 'value'),
      dash.dependencies.State('efficiency', 'value')])
-     #Button
+ 
+# Add new solar cell to database    
 def update_db(submit_n_clicks, typeSP, effic):
-    #data= SolarCell.query.all()
-    #last_id= data[-1].id
-    #last_id=0
-    print(effic)
-    print(typeSP)
     new_entry= SolarCell(None, typeSP, effic)
     db.session.add(new_entry)
     db.session.commit()
@@ -558,8 +541,11 @@ def display_confirm(submit_n_clicks):
      dash.dependencies.Input('Isc', 'value'),
      dash.dependencies.Input('Uoc', 'value'),
      dash.dependencies.Input('N_cells', 'value'),
-     dash.dependencies.Input('editable-table', 'data')])
-def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh,cost_wp,Isc,Uoc,Ncells,rows):
+     dash.dependencies.Input('editable-table', 'data'),
+     dash.dependencies.Input('output-provider2', 'value')])
+def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_input,cost_kwh,cost_wp,Isc,Uoc,Ncells,rows, loc_rad):
+    ##Update everything with input data
+    
     global N_cells
     N_cells=float(Ncells)
     days_input=float(days_input)
@@ -574,29 +560,28 @@ def update_cost(sel_graph, cost_bat,cap_bat, Temp, rad_ampl, rad_width, days_inp
     Cost=Costs()
     Sol=Solar()
     Ncells=float(Ncells)
-    Sol.calc_Pmpp(Ncells,Temp,rad_ampl,rad_width,Isc,Uoc)
+    #Sol.calc_Pmpp(Ncells,Temp,rad_ampl,rad_width,Isc,Uoc)
+    Sol.calc_Pmpp(Ncells,Temp,loc_rad,Isc,Uoc)
+    
     P,P_sol=Sol.get_P_Pmpp()
-    #print(Ncells)
+    
     sol_power=Sol.get_Pmax()
-    print(sol_power,'power2')
-    Cost.calc_costs(Temp,rad_ampl,rad_width,days_input,cost_kwh, cap_bat, cost_bat,sol_power,cost_wp,Isc,Uoc,df_num)
+    Cost.calc_costs(Temp,loc_rad,days_input,cost_kwh, cap_bat, cost_bat,sol_power,cost_wp,Isc,Uoc,df_num)
     grid_costs=Cost.total_costs
     solar_costs=Cost.total_costs_sol
 
     Bat=Battery()
-    Bat.calc_SOC(d_hours,Temp,rad_ampl,rad_width,cap_bat,Isc,Uoc,df_num)
+    Bat.calc_SOC(d_hours,Temp,loc_rad,cap_bat,Isc,Uoc,df_num)
     E_Batt= Bat.get_stored_energy()
     E_grid=Bat.get_from_grid()
-    #print(E_grid,'Grid')
 
-    E=Sol.get_Rad(rad_ampl,rad_width)
+    E= loc_rad
     Cons=Consumer()
-    Cons.calc_power(Temp,rad_ampl,rad_width,Isc,Uoc,df_num)
+    Cons.calc_power(Temp,loc_rad,Isc,Uoc,df_num)
     P_cons=Cons.get_power()
-    #print(days_input,'days')
 
 
-
+# Create Graphs
     traces = []
     trace1=(go.Scatter(
         x=np.arange(0,int(days_input)+1,1),
