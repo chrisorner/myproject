@@ -1,0 +1,6 @@
+- Structurize into more files (app, calculations)
+- Code test using python test libraries
+
+- Solar radiation currently only for the next day. Implement forecast for the next week. (Possibly being able to switch between a
+  long therm prediction based on historical data and a short term based on weather forecast
+- Models for EV, heat pump, E-heater, water storage tank
