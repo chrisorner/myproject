@@ -41,31 +41,45 @@ def create_rad(location):
     for result in json_resp['forecasts']:
         rad.append(result['ghi'])
         period_end.append(result['period_end'])
-    #print(period_end)
-    #print(rad)
     
-    substring = str(datetime.date.today()+ datetime.timedelta(days=1))
+    str_tomorrow = str(datetime.date.today()+ datetime.timedelta(days=1))
+    #str_today = str(datetime.date.today())
     day1=[]
     numt=0
     time_30min=np.linspace(0,1410,48)
     rad_30min=[]
     for num in range(len(period_end)):
-        if substring in period_end[num]:
+        if str_tomorrow in period_end[num]:
             rad_30min.append(rad[num])
             day1.append((time_30min[numt],rad[num]))
             numt+=1
     
-    time_1h= np.linspace(0,1380,24)
-    rad_1h= rad_30min[::2]
     
-    return time_1h,rad_1h
+    for num in range(len(period_end)):
+        if str_tomorrow in period_end[num]:
+            start_num= num 
+            break
+    
+    #print(start_num)    
+    rad_1h6d= rad[start_num::]
+    #print(len(rad_1h6d))
+       
+    
+    time_1h1d= np.linspace(0,1380,24)
+    rad_1h1d= rad_30min[::2]
+    
+    time_1h6d= np.linspace(0,8580,24*6)
+    rad_1h6d=rad_1h6d[:288:2]
+
+    
+    return (time_1h1d,rad_1h1d),(time_1h6d, rad_1h6d)
 
 
-loc= 'Munich'
-time, rad= create_rad(loc)
-#print(rad)
+#loc= 'Munich'
+#result1d, result6d= create_rad(loc)
 
 
 
-#plt.plot(time/60,rad)
+
+#plt.plot(result6d[0]/60,result6d[1])
 #plt.show()
