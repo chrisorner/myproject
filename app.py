@@ -268,8 +268,8 @@ def update_cost(sel_graph, sel_calc, n_clicks, loc_rad, cost_bat, cap_bat, days_
                 rad_val.append(df['Ghi'].iloc[num])
 
         rad_time = np.linspace(1, 8760, 8760)
-        rad_time = rad_time[0:2000]
-        rad_val = rad_val[0:2000]
+        # rad_time = rad_time[0:2000]
+        # rad_val = rad_val[0:2000]
 
     t_len = len(rad_val)
     d_len = int(t_len / 24)
@@ -294,23 +294,20 @@ def update_cost(sel_graph, sel_calc, n_clicks, loc_rad, cost_bat, cap_bat, days_
         sol = Solar(rad_val)
         n_cells = float(n_cells)
         # Sol.calc_Pmpp(Ncells,Temp,rad_ampl,rad_width,Isc,Uoc)
-        sol.calc_Pmpp(n_cells, Temp, rad_val, Isc, Uoc)
+        p_sol = sol.calc_power(rad_val)
+        p_peak = 300 #todo this must come from input
 
-        p, p_sol = sol.get_P_Pmpp()
-
-        sol_power = sol.get_Pmax()
-        cost.calc_costs(n_cells, Temp, rad_val, days_input, cost_kwh, cap_bat, cost_bat, sol_power, cost_wp, Isc, Uoc,
-                        df_num)
+        cost.calc_costs(rad_val, days_input, cost_kwh, cap_bat, cost_bat, p_peak, cost_wp, df_num)
         grid_costs = cost.total_costs
         solar_costs = cost.total_costs_sol
 
         bat = Battery(rad_val)
-        bat.calc_SOC(n_cells, Temp, rad_val, cap_bat, Isc, Uoc, df_num)
+        bat.calc_soc(rad_val, cap_bat, df_num)
         e_batt = bat.get_stored_energy()
         e_grid = bat.get_from_grid()
 
         cons = Consumer(rad_val)
-        cons.calc_power(n_cells, Temp, rad_val, Isc, Uoc, df_num)
+        cons.calc_power(rad_val, df_num)
         p_cons = cons.get_power()
 
     # Create Graphs
