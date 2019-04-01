@@ -56,13 +56,16 @@ class SolarCell(db.Model):
     __tablename__ = "Photovoltaik"
 
     id = db.Column(db.Integer, primary_key=True)
-    type = db.Column(db.String(30))
+    name = db.Column(db.String(30))
     efficiency = db.Column(db.Float)
 
-    def __init__(self, id, type, efficiency):
+    def __init__(self, id, name, efficiency):
         self.id = id
-        self.type = type
+        self.name = name
         self.efficiency = efficiency
+
+
+all_cells = SolarCell.query.all()
 
 
 ## End of SQL stuff        
@@ -116,8 +119,8 @@ app.layout = html.Div([
             html.Div([
                 html.H4('Energy System', className='col-12'),
                 html.Div([
-                    html.Label('Number of Cells', id='N_cells_label'),
-                    dcc.Input(id='N_cells', value='150', type='text', className='form-control')
+                    html.Label('Solar Panels Area [m2]', id='A_cells_label'),
+                    dcc.Input(id='A_cells', value='10', type='text', className='form-control')
                 ], className='col-4 offset-md-1'),
                 html.Div([
                     html.Label('Battery Capacity [kWh]', id='cap_label'),
@@ -125,14 +128,15 @@ app.layout = html.Div([
                 ], className='col-4 offset-md-1')
             ], className='row my-4'),
             html.Div([
-                html.H4('Data Sheet Solar Panel', className='col-12'),
+                html.H4('Select Solar Panel', className='col-12'),
                 html.Div([
-                    html.Label('Short Circuit Current [A]', id='Isc_label'),
-                    dcc.Input(id='Isc', value='6', type='text', className='form-control'),
+                    dcc.Dropdown(
+                        id='select_database',
+                        options=[{'label': [cell.name+' ('+str(cell.efficiency)+'%)'], 'value': cell.name} for cell in all_cells
+                                 ], value='LG')
                 ], className='col-4 offset-md-1'),
                 html.Div([
-                    html.Label('Open Circuit Voltage [V]', id='Uoc_label'),
-                    dcc.Input(id='Uoc', value='0.67', type='text', className='form-control')
+
                 ], className='col-4 offset-md-1')
             ], className='row my-4'),
             html.Div([
@@ -147,11 +151,11 @@ app.layout = html.Div([
                 ], className='col-3'),
                 html.Div([
                     html.Label('Solar Panels [EUR/kWp]', id='cost_label3'),
-                    dcc.Input(id='cost_wp', value='600', type='text', className='form-control')
+                    dcc.Input(id='cost_wp', value='1200', type='text', className='form-control')
                 ], className='col-3'),
                 html.Div([
-                    html.Label('Number of Days to View', id='days_label'),
-                    dcc.Input(id='days', value='2', type='number', className='form-control')
+                    html.Label('Number of Years', id='years_label'),
+                    dcc.Input(id='years', value='2', type='number', className='form-control')
                 ], className='col-3')
             ], className='row my-4 align-items-end')
         ], className='col-6')
@@ -171,7 +175,7 @@ app.layout = html.Div([
                 id='editable-table')
         ], className='col-4'),
         html.Div([
-            html.H4('Tune Solar Radiation', className='col-12'),
+            html.H4('Get Solar Radiation', className='col-12'),
             html.Div([
                 html.Div([html.Label('Location', id='location_label'),
                           dcc.Input(id='location', type='text', className='form-control')
@@ -216,14 +220,15 @@ def get_loc_rad(n_clicks, loc):
 
 @app.callback(
     dash.dependencies.Output('placeholder', 'children'),
-    [dash.dependencies.Input('confirm', 'submit_n_clicks')],
+    [dash.dependencies.Input('button', 'n_clicks')],
     [dash.dependencies.State('typeSP', 'value'),
      dash.dependencies.State('efficiency', 'value')])
 # Add new solar cell to database
-def update_db(submit_n_clicks, typeSP, effic):
-    new_entry = SolarCell(None, typeSP, effic)
-    db.session.add(new_entry)
-    db.session.commit()
+def update_db(n_clicks, typeSP, effic):
+    if n_clicks is not None:
+        new_entry = SolarCell(None, typeSP, effic)
+        db.session.add(new_entry)
+        db.session.commit()
 
 
 @app.callback(dash.dependencies.Output('output-provider', 'children'),
@@ -236,23 +241,22 @@ def display_confirm(submit_n_clicks):
     dash.dependencies.Output('graph-with-slider', 'figure'),
     [dash.dependencies.Input('select_Graph', 'value'),
      dash.dependencies.Input('select_calc', 'value'),
+     dash.dependencies.Input('select_database', 'value'),
      dash.dependencies.Input('button_calc', 'n_clicks'),
      dash.dependencies.Input('output-provider2', 'value')],
     [dash.dependencies.State('cost_bat', 'value'),
      dash.dependencies.State('capacity', 'value'),
-     dash.dependencies.State('days', 'value'),
+     dash.dependencies.State('years', 'value'),
      dash.dependencies.State('cost_kwh', 'value'),
      dash.dependencies.State('cost_wp', 'value'),
-     dash.dependencies.State('Isc', 'value'),
-     dash.dependencies.State('Uoc', 'value'),
-     dash.dependencies.State('N_cells', 'value'),
+     dash.dependencies.State('A_cells', 'value'),
      dash.dependencies.State('editable-table', 'data')],
 )
-def update_cost(sel_graph, sel_calc, n_clicks, loc_rad, cost_bat, cap_bat, days_input, cost_kwh, cost_wp, Isc, Uoc,
-                n_cells, rows):
+def update_cost(sel_graph, sel_calc, sel_cell, n_clicks, loc_rad, cost_bat, cap_bat, years_input, cost_kwh, cost_wp, area_cells,
+                rows):
     ##Update everything with input data
     Temp = 298  # Ambient Temperature
-    days_input = float(days_input)
+    years_input = int(years_input)
 
     if sel_calc == 'forec':
         rad_val = loc_rad[1]
@@ -267,7 +271,9 @@ def update_cost(sel_graph, sel_calc, n_clicks, loc_rad, cost_bat, cap_bat, days_
             if last_year in df['PeriodEnd'].iloc[num]:
                 rad_val.append(df['Ghi'].iloc[num])
 
-        rad_time = np.linspace(1, 8760, 8760)
+        # [rad_val.extend(rad_val) for i in range(years_input-1)]
+
+        rad_time = np.linspace(1, 8760*years_input, 8760*years_input)
         # rad_time = rad_time[0:2000]
         # rad_val = rad_val[0:2000]
 
@@ -282,6 +288,10 @@ def update_cost(sel_graph, sel_calc, n_clicks, loc_rad, cost_bat, cap_bat, days_
     df_num = pd.to_numeric(dff['Energy Consumption [kWh]'])
     df_num = df_num.as_matrix()
 
+    for cell in all_cells:
+        if cell.name == sel_cell:
+            cell_obj = cell
+
     grid_costs = []
     solar_costs = []
     e_batt = []
@@ -290,35 +300,35 @@ def update_cost(sel_graph, sel_calc, n_clicks, loc_rad, cost_bat, cap_bat, days_
     p_cons = []
 
     if n_clicks:
-        cost = Costs(rad_val)
+        cost = Costs(rad_val,years_input)
         sol = Solar(rad_val)
-        n_cells = float(n_cells)
+        area_cells = float(area_cells)
         # Sol.calc_Pmpp(Ncells,Temp,rad_ampl,rad_width,Isc,Uoc)
-        p_sol = sol.calc_power(rad_val)
-        p_peak = 300 #todo this must come from input
+        p_sol = sol.calc_power(rad_val, area_cells, cell_obj)
+        p_peak = area_cells*cell_obj.efficiency/100*1000
 
-        cost.calc_costs(rad_val, days_input, cost_kwh, cap_bat, cost_bat, p_peak, cost_wp, df_num)
+        cost.calc_costs(rad_val, years_input, cost_kwh, cap_bat, cost_bat, p_peak, cost_wp, df_num, area_cells, cell_obj)
         grid_costs = cost.total_costs
         solar_costs = cost.total_costs_sol
 
         bat = Battery(rad_val)
-        bat.calc_soc(rad_val, cap_bat, df_num)
+        bat.calc_soc(rad_val, cap_bat, df_num, area_cells, cell_obj)
         e_batt = bat.get_stored_energy()
         e_grid = bat.get_from_grid()
 
         cons = Consumer(rad_val)
-        cons.calc_power(rad_val, df_num)
+        cons.calc_power(rad_val, df_num, area_cells, cell_obj)
         p_cons = cons.get_power()
 
     # Create Graphs
     trace1 = (go.Scatter(
-        x=np.arange(0, d_len + 1, 1),
+        x=np.arange(0, d_len*years_input + 1, 1),
         y=grid_costs,
         name='Without Solar Panels',
     ))
 
     trace2 = (go.Scatter(
-        x=np.arange(0, d_len + 1, 1),
+        x=np.arange(0, d_len*years_input + 1, 1),
         y=solar_costs,
         name='With Solar Panels',
     ))
@@ -352,8 +362,8 @@ def update_cost(sel_graph, sel_calc, n_clicks, loc_rad, cost_bat, cap_bat, days_
         },
     ))
     trace6 = (go.Scatter(
-        x=rad_time,
-        y=rad_val,
+        x=rad_time[0:8760],
+        y=rad_val[0:8760],
         name='Radiation',
         yaxis='y1',
         marker={
@@ -379,7 +389,7 @@ def update_cost(sel_graph, sel_calc, n_clicks, loc_rad, cost_bat, cap_bat, days_
             'data': traces[0:2],
             'layout': go.Layout(
                 title='Cost Estimation',
-                xaxis={'title': 'Days'},
+                xaxis={'title': 'Days/Years'},
                 yaxis={'title': 'Costs [Eur]'},
                 legend=dict(x=-.1, y=1.2)
             )
