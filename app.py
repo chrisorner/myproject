@@ -16,8 +16,9 @@ from flask_sqlalchemy import SQLAlchemy
 # import requests
 # from geopy.geocoders import Nominatim
 from get_local_rad import create_rad
-
+from read_house_hold_data3 import consumer_data
 from calculations import Solar, Battery, Consumer, Costs
+import datetime
 
 ## same function also in calculations file. Global variables to be removed
 #
@@ -83,6 +84,11 @@ df = pd.DataFrame({
     'Energy Consumption [kWh]': [0.2, 0.2, 0.2, 0.2, 0.2, 1, 1.5, 1, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 1.5,
                                  1, 0.8, 0.8, 0.5, 0.2, 0.2]
 }, columns=['Hour', 'Energy Consumption [kWh]'])
+
+# load energy constumption data
+dataset = pd.read_csv('household_power_consumption1.csv', header=0, infer_datetime_format=True, parse_dates=['datetime'],
+                   index_col=['datetime'])
+consumption = consumer_data(dataset)
 
 ## GUI is created here
 app.layout = html.Div([
@@ -252,15 +258,27 @@ def display_confirm(submit_n_clicks):
      dash.dependencies.State('A_cells', 'value'),
      dash.dependencies.State('editable-table', 'data')],
 )
-def update_cost(sel_graph, sel_calc, sel_cell, n_clicks, loc_rad, cost_bat, cap_bat, years_input, cost_kwh, cost_wp, area_cells,
-                rows):
+def update_cost(sel_graph, sel_calc, sel_cell, n_clicks, loc_rad, cost_bat, cap_bat, years_input, cost_kwh, cost_wp,
+                area_cells, rows):
     ##Update everything with input data
     Temp = 298  # Ambient Temperature
     years_input = int(years_input)
 
+    # Find today's date and end date in 5 days
+    today = datetime.datetime.today().strftime('2007-%m-%dT00:00')
+    time_end = datetime.date.today() + datetime.timedelta(days=5)
+    end_time = time_end.strftime('2007-%m-%dT23:00')
+
+    # 1 year consumption
+    dff = consumption
+    # consumption for short term forecast
+    dff2 = dff.loc[today:end_time]
+
     if sel_calc == 'forec':
         rad_val = loc_rad[1]
         rad_time = [x / 60 for x in loc_rad[0]]
+
+        dff = dff2
     else:
         df = pd.read_csv('hist_irrad.csv')
         # print(df['PeriodEnd'].head())
@@ -283,9 +301,8 @@ def update_cost(sel_graph, sel_calc, sel_cell, n_clicks, loc_rad, cost_bat, cap_
     # if days_input > 5 and sel_graph=='power_graph':
     #    days_input = 5
 
-    dff = pd.DataFrame(rows)
     # dff_conc=pd.concat([dff]*d_ges)
-    df_num = pd.to_numeric(dff['Energy Consumption [kWh]'])
+    df_num = pd.to_numeric(dff['Global_active_power'])
     df_num = df_num.as_matrix()
 
     for cell in all_cells:
