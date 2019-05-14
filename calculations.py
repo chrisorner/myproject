@@ -191,18 +191,16 @@ class Costs:
         else:
             self.total_costs_sol[0] = cost_solar + cost_battery
             self.costs_sol_year[0] = cost_solar + cost_battery
+
+            # calc the costs for the energy required from the grid (with solar panels)
             cost_grid = cost_kwh * pow_from_grid
             for i in range(t_len):
-                # calc the costs for the energy required from the grid (with solar panels)
 
                 # calc the daily costs without solar panels (1 year)
-                if i == 8750:
-                    print(i)
-                # Index 2822 of p_cons is false
                 self.costs_year[i + 1] = self.costs_year[i] + p_cons[i] * cost_kwh
                 # calc the daily costs with solar panels (1 year)
                 self.costs_sol_year[i+1] = self.costs_sol_year[i] + cost_grid[i]
-# todo cost_grid can never be higher then p_cons
+            # todo: different calc for forecast
             # calculate the slope of the cost function with and without solar panels
             slope1 = self.costs_year[-1] / 365
             slope = (self.costs_sol_year[-1]-self.costs_sol_year[0])/365
@@ -210,11 +208,6 @@ class Costs:
                 # extrapolate the costs over the desired number of years
                 self.total_costs[i] = slope1 * (365 * i)
                 self.total_costs_sol[i] = slope*(365*i)+self.total_costs_sol[0]
-
-        #if len(rad) > 145:
-         #   for i in range(inp_years-1):
-         #       self.total_costs.extend(self.total_costs)
-         #       self.total_costs_sol.extend(self.total_costs_sol)
 
 
 ## End of Calculations ###
