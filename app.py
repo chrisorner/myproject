@@ -16,6 +16,7 @@ from flask_sqlalchemy import SQLAlchemy
 # import requests
 # from geopy.geocoders import Nominatim
 from get_local_rad import create_rad
+from get_local_rad2 import create_rad_jrc
 from read_house_hold_data3 import consumer_data
 from calculations import Solar, Battery, Consumer, Costs
 import datetime
@@ -184,7 +185,7 @@ app.layout = html.Div([
             html.H4('Get Solar Radiation', className='col-12'),
             html.Div([
                 html.Div([html.Label('Location', id='location_label'),
-                          dcc.Input(id='location', type='text', className='form-control')
+                          dcc.Input(id='location', type='text', className='form-control', value='Berlin')
                           ], className='col-7'),
                 html.Div([html.Button('Submit', id='button_loc', className='btn btn-primary')]),
                 dcc.Input(id='output-provider2', type='hidden')
@@ -221,7 +222,8 @@ app.layout = html.Div([
 def get_loc_rad(n_clicks, loc):
     # get the radiation for location
     rad_data1d, rad_data7d = create_rad(loc)
-    return (rad_data7d[0], rad_data7d[1])
+    rad_data_hist = create_rad_jrc(loc)
+    return (rad_data_hist, rad_data7d[1])
 
 
 @app.callback(
@@ -265,6 +267,7 @@ def update_cost(sel_graph, sel_calc, sel_cell, n_clicks, loc_rad, cost_bat, cap_
     years_input = int(years_input)
 
     # Find today's date and end date in 5 days
+    time_vec6d= np.linspace(0,8580,24*6)
     today = datetime.datetime.today().strftime('2007-%m-%dT00:00')
     time_end = datetime.date.today() + datetime.timedelta(days=5)
     end_time = time_end.strftime('2007-%m-%dT23:00')
@@ -276,21 +279,19 @@ def update_cost(sel_graph, sel_calc, sel_cell, n_clicks, loc_rad, cost_bat, cap_
 
     if sel_calc == 'forec':
         rad_val = loc_rad[1]
-        rad_time = [x / 60 for x in loc_rad[0]]
+        rad_time = [x / 60 for x in time_vec6d]
 
         dff = dff2
     else:
-        df = pd.read_csv('hist_irrad.csv')
-        # print(df['PeriodEnd'].head())
-        last_year = '2018'
-        rad_val = []
+        #df = pd.read_csv('hist_irrad.csv')
+        #last_year = '2018'
+        #rad_val = []
 
-        for num in range(len(df['PeriodEnd'])):
-            if last_year in df['PeriodEnd'].iloc[num]:
-                rad_val.append(df['Ghi'].iloc[num])
+        #for num in range(len(df['PeriodEnd'])):
+        #    if last_year in df['PeriodEnd'].iloc[num]:
+        #        rad_val.append(df['Ghi'].iloc[num])
 
-        # [rad_val.extend(rad_val) for i in range(years_input-1)]
-
+        rad_val=loc_rad[0][:8760]
         rad_time = np.linspace(1, 8760*years_input, 8760*years_input)
         # rad_time = rad_time[0:2000]
         # rad_val = rad_val[0:2000]
