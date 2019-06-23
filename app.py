@@ -18,7 +18,7 @@ from flask_sqlalchemy import SQLAlchemy
 from get_local_rad import create_rad
 from get_local_rad2 import create_rad_jrc
 from read_house_hold_data3 import consumer_data
-from calculations import Solar, Battery, Consumer, Costs
+from calculations import Solar, Battery, Costs
 import datetime
 
 ## same function also in calculations file. Global variables to be removed
@@ -127,11 +127,11 @@ app.layout = html.Div([
                 html.H4('Energy System', className='col-12'),
                 html.Div([
                     html.Label('Solar Panels Area [m2]', id='A_cells_label'),
-                    dcc.Input(id='A_cells', value='10', type='text', className='form-control')
+                    dcc.Input(id='A_cells', value='50', type='text', className='form-control')
                 ], className='col-4 offset-md-1'),
                 html.Div([
                     html.Label('Battery Capacity [kWh]', id='cap_label'),
-                    dcc.Input(id='capacity', value='10', type='text', className='form-control')
+                    dcc.Input(id='capacity', value='5', type='text', className='form-control')
                 ], className='col-4 offset-md-1')
             ], className='row my-4'),
             html.Div([
@@ -150,7 +150,7 @@ app.layout = html.Div([
                 html.H4('Cost Data', className='col-12'),
                 html.Div([
                     html.Label('Battery [EUR/kWh]', id='cost_label'),
-                    dcc.Input(id='cost_bat', value='1000', type='text', className='form-control')
+                    dcc.Input(id='cost_bat', value='1500', type='text', className='form-control')
                 ], className='col-3'),
                 html.Div([
                     html.Label('Grid supply [EUR/kWh]', id='cost_label2'),
@@ -158,11 +158,11 @@ app.layout = html.Div([
                 ], className='col-3'),
                 html.Div([
                     html.Label('Solar Panels [EUR/kWp]', id='cost_label3'),
-                    dcc.Input(id='cost_wp', value='1200', type='text', className='form-control')
+                    dcc.Input(id='cost_wp', value='1923', type='text', className='form-control')
                 ], className='col-3'),
                 html.Div([
                     html.Label('Number of Years', id='years_label'),
-                    dcc.Input(id='years', value='2', type='number', className='form-control')
+                    dcc.Input(id='years', value='20', type='number', className='form-control')
                 ], className='col-3')
             ], className='row my-4 align-items-end')
         ], className='col-6')
@@ -318,14 +318,15 @@ def update_cost(sel_graph, sel_calc, sel_cell, n_clicks, loc_rad, cost_bat, cap_
     p_cons = []
 
     if n_clicks:
-        cost = Costs(rad_val,years_input)
+
         sol = Solar(rad_val)
         area_cells = float(area_cells)
         # Sol.calc_Pmpp(Ncells,Temp,rad_ampl,rad_width,Isc,Uoc)
         p_sol = sol.calc_power(rad_val, area_cells, cell_obj)
         p_peak = area_cells*cell_obj.efficiency/100*1000
+        cost = Costs(rad_val, years_input, cost_kwh, p_peak)
 
-        cost.calc_costs(rad_val, years_input, cost_kwh, cap_bat, cost_bat, p_peak, cost_wp, df_num, area_cells, cell_obj)
+        cost.calc_costs(rad_val, years_input, cap_bat, cost_bat, p_peak, cost_wp, df_num, area_cells, cell_obj)
         grid_costs = cost.total_costs
         solar_costs = cost.total_costs_sol
 
@@ -333,10 +334,9 @@ def update_cost(sel_graph, sel_calc, sel_cell, n_clicks, loc_rad, cost_bat, cap_
         bat.calc_soc(rad_val, cap_bat, df_num, area_cells, cell_obj)
         e_batt = bat.get_stored_energy()
         e_grid = bat.get_from_grid()
+        e_sell = bat.get_w_unused()
 
-        cons = Consumer(rad_val)
-        cons.calc_power(rad_val, df_num, area_cells, cell_obj)
-        p_cons = cons.get_power()
+        p_cons = df_num
 
     # Create Graphs
     trace1 = (go.Scatter(

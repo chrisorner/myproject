@@ -10,18 +10,6 @@ import numpy as np
 np.set_printoptions(threshold=np.nan)
 from scipy.optimize import fsolve
 
-# timestep for the SOC calculation
-# d_len = 10
-# d_hours = np.arange(1, 25, 1)
-# t_len = np.size(d_hours)
-
-# N_cells=1
-
-# days are gui input
-###setup time vectors dependend on days input
-
-# t_ges = np.arange(1, t_len * d_len + 1, 1)
-
 
 class Solar:
 
@@ -45,8 +33,9 @@ class Battery:
         self.w_max = 100
         self.stored_energy = np.zeros(t_ges)
         self.SOC = np.zeros(t_ges)
-        self.from_grid = np.zeros(t_ges)
-        self.W_unused = np.zeros(t_ges)
+        self.from_grid = np.zeros(t_ges) # Power drawn from grid
+        self.W_unused = np.zeros(t_ges) # Power that is fed into grid
+        self.p_store = np.zeros(t_ges) # Power that goes into battery
 
     def get_soc(self):
         x = self.SOC
@@ -69,76 +58,78 @@ class Battery:
         t_len = int(len(rad))
         # Wmax input from GUI
         self.w_max = int(bat_capacity)
-        cons = Consumer(rad)  # Energy that is consumed
-        cons.calc_power(rad, cons_ener, cell_area, cell)
-        p_store = cons.get_power_to_bat()  # Power that goes into battery
+        sol = Solar(rad)
+        p_mpp = sol.calc_power(rad, cell_area, cell)
+        for i in range(np.size(cons_ener)):
+            self.p_store[i] = p_mpp[i] / 1000 - cons_ener[i]
+
 
         for i in range(t_len):
             # battery is neither full nor empty and can be charged/discharged
-            if (self.stored_energy[i - 1] + p_store[i] >= 0) and (
-                    self.stored_energy[i - 1] + p_store[i] <= self.w_max):  # charge
+            if (self.stored_energy[i - 1] + self.p_store[i] >= 0) and (
+                    self.stored_energy[i - 1] + self.p_store[i] <= self.w_max):  # charge
                 # Pmpp from solargen
-                self.stored_energy[i] = self.stored_energy[i] + p_store[i]
+                self.stored_energy[i] = self.stored_energy[i] + self.p_store[i]
                 self.W_unused[i] = self.W_unused[i - 1]
 
 
 
             # battery empty and cannot be discharged
-            elif self.stored_energy[i - 1] + p_store[i] < 0:
+            elif self.stored_energy[i - 1] + self.p_store[i] < 0:
                 self.stored_energy[i] = 0
                 self.W_unused[i] = self.W_unused[i - 1]
-                self.from_grid[i] = abs(p_store[i])
+                self.from_grid[i] = abs(self.p_store[i])
                 # print(i)
 
 
             # battery full and cannot be charged
-            elif self.stored_energy[i - 1] + p_store[i] > self.w_max:
+            elif self.stored_energy[i - 1] + self.p_store[i] > self.w_max:
                 # print(self.Wmax-self.stored_energy[i-1])
-                self.W_unused[i] = self.W_unused[i - 1] + self.stored_energy[
-                    i - 1] + p_store[i] - self.w_max
+                self.W_unused[i] = self.stored_energy[
+                    i - 1] + self.p_store[i] - self.w_max
                 self.stored_energy[i] = self.w_max
 
             self.SOC[i] = self.stored_energy[i] / self.w_max
 
 
-class Consumer:
-    # Energy that is used by consumer
-    def __init__(self, rad):
-        t_ges = len(rad) + 1
-        self.power = np.zeros(t_ges)
-        self.P_diff = np.zeros(t_ges)
-
-    def get_power(self):
-        x = self.power
-        return x
-
-    def get_power_to_bat(self):
-        x = self.P_diff
-        return x
-
-    def calc_power(self, rad, power, area, cell):
-        # todo check if Pdiff correct
-        self.power = power
-        sol = Solar(rad)
-        p_mpp = sol.calc_power(rad, area, cell)
-
-        for i in range(np.size(self.power)):
-            self.P_diff[i] = p_mpp[i] / 1000 - self.power[i]
-
-
-
 class Costs:
-    def __init__(self, rad, inp_years):
-        t_len = int(len(rad))
+    def __init__(self, rad, inp_years, cost_kwh, power):
+        self.t_len = int(len(rad))
         if len(rad) < 145:
-            time_frame = t_len
+            time_frame = self.t_len
         else:
             time_frame = inp_years
 
-        self.costs_year = np.zeros(t_len + 1)  # index 0 is always 0, costs start at index 1
+        self.cost_energy_inc = 0.01
+        self.cost_basic = 100
+        self.cost_kwh = float(cost_kwh)
+        years = np.arange(inp_years)
+        self.cost_var = self.cost_kwh * (1 + self.cost_energy_inc) ** years  # variable cost for energy
+        self.cost_fix = power # Fix costs
+        cost_dep = 5 * power / 1000 # cost depending on power consumption
+        # Operational costs incl repair
+        self.cost_operate = self.cost_fix + cost_dep
+        self.inflation= 0.02
+        self.feedInTariff = 0.1147 #€/kwh
+
+        self.cons_year = np.zeros(self.t_len + 1)  # index 0 is always 0, costs start at index 1
         self.total_costs = np.zeros(time_frame + 1)
         self.total_costs_sol = np.zeros(time_frame + 1)
-        self.costs_sol_year = np.zeros(t_len+1)
+        self.cons_sol_year = np.zeros(self.t_len+1)
+        self.feedIn_year = np.zeros(self.t_len+1)
+
+    @property
+    def cost_fix(self):
+        return self.__cost_fix
+
+    @cost_fix.setter
+    def cost_fix(self, power):
+        # Operational costs incl repair. For solar system above 8kW additional 21€/a for production counter is required
+        if power/1000 > 8:
+            self.__cost_fix = 148+21
+        else:
+            self.__cost_fix = 148
+
 
     def battery_invest(self, capacity, cost_per_kwh):
         invest = float(cost_per_kwh) * float(capacity)
@@ -146,68 +137,60 @@ class Costs:
 
     def solar_invest(self, power, cost_per_kwp):
         # solar power in W but price per kwp
-        invest = float(power) / 1000 * float(cost_per_kwp)
+        # 𝐼𝑛𝑣𝑒𝑠𝑡𝑚𝑒𝑛𝑡 𝑐𝑜𝑠𝑡𝑠:𝑃𝑎𝑛𝑒𝑙𝑠, 𝐶𝑜𝑢𝑛𝑡𝑒𝑟, 𝑖𝑛𝑠𝑡𝑎𝑙𝑙𝑎𝑡𝑖𝑜𝑛, 𝑝𝑜𝑤𝑒𝑟 𝑒𝑙𝑒𝑐𝑡𝑟𝑜𝑛𝑖𝑐𝑠 (Average Germany)
+        p_kw = (float(power) / 1000)
+        invest_per_kw= float(cost_per_kwp)
+
+        invest = p_kw**(-0.16) * p_kw * invest_per_kw * (1+0.19)
         return invest
 
-    def calc_costs(self, rad, inp_years, cost_kwh, capacity, cost_bat, power, cost_per_kwp, cons_ener, panel_area, cell):
+    def calc_costs(self, rad, inp_years, capacity, cost_bat, power, cost_per_kwp, cons_ener, panel_area, cell):
         # cost calculated for 6 days without investmetn  costs using global d_len
 
-        t_len = int(len(rad))
-
-        # calculate total cost battery + solar cells + energy from grid
-        #inp_years = int(inp_years)
-        if len(rad) < 145:  # indicates forecast, then without investment
-            num_years = 1
-        else:
-            num_years = inp_years
-
-
-        cost_kwh = float(cost_kwh)
         cost_battery = self.battery_invest(capacity, cost_bat)
         cost_solar = self.solar_invest(power, cost_per_kwp)
-        cons = Consumer(rad)
-        cons.calc_power(rad, cons_ener, panel_area, cell)
-        p_cons = cons.get_power()  # power req by consumer
+
+        p_cons = cons_ener  # power req by consumer
 
         bat = Battery(rad)
         bat.calc_soc(rad, capacity, cons_ener, panel_area, cell)
         pow_from_grid = bat.get_from_grid()
-        # print(P_cons)
-        # todo change how power from grid is used
-        # costs_per_day = cost_kwh * sum(p_cons)
+        pow_sell = bat.get_w_unused()
 
-        # only over one day so that each element in total costs represents 1 day
-        # cost_grid= cost_kwh*sum(pow_from_grid[0:24])
-        # for i in range(d_len+1):
-        # self.total_costs_sol[i]=cost_grid*i+cost_solar+cost_battery
 
         if len(rad) < 145:  # indicates forecast, then without investment
-            for i in range(t_len):
-                cost_grid = cost_kwh * pow_from_grid
+            for i in range(self.t_len):
+                cost_grid = self.cost_kwh * pow_from_grid
                 # index 0 is 0
-                self.total_costs[i + 1] = p_cons[i]*cost_kwh
+                self.total_costs[i + 1] = p_cons[i]*self.cost_kwh
                 self.total_costs_sol[i + 1] = self.total_costs_sol[
                                               i] + cost_grid[i]  # for short-term prediction without investment costs
         else:
-            self.total_costs_sol[0] = cost_solar + cost_battery
-            self.costs_sol_year[0] = cost_solar + cost_battery
+            self.total_costs_sol[0] = -cost_solar - cost_battery
+
 
             # calc the costs for the energy required from the grid (with solar panels)
-            cost_grid = cost_kwh * pow_from_grid
-            for i in range(t_len):
+            for i in range(self.t_len):
 
                 # calc the daily costs without solar panels (1 year)
-                self.costs_year[i + 1] = self.costs_year[i] + p_cons[i] * cost_kwh
+                self.cons_year[i + 1] = self.cons_year[i] + p_cons[i]
                 # calc the daily costs with solar panels (1 year)
-                self.costs_sol_year[i+1] = self.costs_sol_year[i] + cost_grid[i]
-            # todo: different calc for forecast
+                self.cons_sol_year[i + 1] = self.cons_sol_year[i]+pow_from_grid[i]
+                self.feedIn_year[i + 1] = self.feedIn_year[i] + pow_sell[i]
+
+
             # calculate the slope of the cost function with and without solar panels
-            slope1 = self.costs_year[-1] / 365
-            slope = (self.costs_sol_year[-1]-self.costs_sol_year[0])/365
-            for i in range(1, inp_years+1):
+            slope1 = self.cons_year[-1] / 365
+            slope = self.cons_sol_year[-1]/365
+            slope2 = self.feedIn_year[-1]/365
+            for i in range(inp_years):
                 # extrapolate the costs over the desired number of years
-                self.total_costs[i] = slope1 * (365 * i)
-                self.total_costs_sol[i] = slope*(365*i)+self.total_costs_sol[0]
+                # Barwertmethode
+                self.total_costs[i+1] = self.total_costs[i]-(slope1*365*self.cost_var[i] +
+                                                             self.cost_basic)*(1+self.inflation)**(-(i+1))
+                self.total_costs_sol[i+1] = self.total_costs_sol[i]-(slope*365*self.cost_var[i] +
+                                                self.cost_operate + self.cost_basic - slope2*365*self.feedInTariff) * \
+                                                (1+self.inflation)**(-(i+1))
 
 
 ## End of Calculations ###
