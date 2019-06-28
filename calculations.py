@@ -6,6 +6,14 @@ Created on Thu Jan 17 06:24:43 2019
 """
 
 import numpy as np
+import requests
+import numpy as np
+import pandas as pd
+from geopy.geocoders import Nominatim
+# finally, we import the pvlib library
+import pvlib
+from pvlib import pvsystem
+from pvlib.forecast import GFS, NAM, NDFD, HRRR, RAP
 
 np.set_printoptions(threshold=np.nan)
 from scipy.optimize import fsolve
@@ -22,6 +30,74 @@ class Solar:
         self.P_solar = [i*area*efficiency/100 for i in rad]
         return self.P_solar
 
+
+class Solar2:
+
+    def __init__(self):
+
+        self.latitude = 48.8566101
+        self.longitude = 2.3514992
+        self.tz= 'CET'
+        self.surface_tilt = 30
+        self.surface_azimuth = 180
+        self.sun_zen= 0
+        self.air_mass= 0
+
+    def get_location(self, city):
+        geolocator = Nominatim(user_agent="Enefso")
+        location = geolocator.geocode(city)
+        self.longitude = location.longitude
+        self.latitude = location.latitude
+
+
+    def forecast(self, lat, long, start, end):
+        fm = GFS()
+        forecast_data = fm.get_processed_data(lat, long, start, end)
+        return forecast_data
+
+    def calc_irrad(self, times, lat, lon, tz, city):
+        tus= pvlib.location.Location(lat, lon, tz=tz, altitude=0, name=city)
+        ephem_data = tus.get_solarposition(times)
+        irrad_data = tus.get_clearsky(times)
+        self.sun_zen = ephem_data['apparent_zenith']
+        self.air_mass = pvlib.atmosphere.get_relative_airmass(self.sun_zen)
+        dni_et = pvlib.irradiance.get_extra_radiation(times.dayofyear)
+
+        total = pvlib.irradiance.get_total_irradiance(
+            self.surface_tilt, self.surface_azimuth,
+            ephem_data['apparent_zenith'], ephem_data['azimuth'],
+            dni=irrad_data['dni'], ghi=irrad_data['ghi'], dhi=irrad_data['dhi'],
+            dni_extra=dni_et, airmass=self.air_mass,
+            model='isotropic',
+            surface_type='urban')
+
+        return total
+
+    def pv_system(self,times, irrad, module):
+
+        wind= pd.Series(5,index= times)
+        temp= pd.Series(20, index= times)
+        pressure= 101325
+        airmass = self.air_mass
+        am_abs = pvlib.atmosphere.get_absolute_airmass(airmass, pressure)
+        solpos = pvlib.solarposition.get_solarposition(times, self.latitude, self.longitude)
+        pvtemp = pvsystem.sapm_celltemp(irrad['poa_global'], wind, temp)
+
+        sandia_modules = pvsystem.retrieve_sam(name='SandiaMod')
+        sandia_module = sandia_modules[module]
+        #sandia_module= module
+        #module_names = list(sandia_modules.columns)
+
+        aoi = pvlib.irradiance.aoi(self.surface_tilt, self.surface_azimuth,
+                                   solpos['apparent_zenith'], solpos['azimuth'])
+
+        effective_irradiance = pvlib.pvsystem.sapm_effective_irradiance(
+            irrad['poa_direct'], irrad['poa_diffuse'],
+            am_abs, aoi, sandia_module)
+
+        sapm_1 = pvlib.pvsystem.sapm(effective_irradiance, pvtemp['temp_cell'], sandia_module)
+
+        return sapm_1['p_mp'].values
 
 
 class Battery:

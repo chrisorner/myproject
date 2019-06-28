@@ -18,8 +18,10 @@ from flask_sqlalchemy import SQLAlchemy
 from get_local_rad import create_rad
 from get_local_rad2 import create_rad_jrc
 from read_house_hold_data3 import consumer_data
-from calculations import Solar, Battery, Costs
+from calculations import Solar, Solar2, Battery, Costs
 import datetime
+import pvlib
+from pvlib import pvsystem
 
 ## same function also in calculations file. Global variables to be removed
 #
@@ -69,7 +71,6 @@ class SolarCell(db.Model):
 
 all_cells = SolarCell.query.all()
 
-
 ## End of SQL stuff        
 
 
@@ -90,6 +91,9 @@ df = pd.DataFrame({
 dataset = pd.read_csv('household_power_consumption1.csv', header=0, infer_datetime_format=True, parse_dates=['datetime'],
                    index_col=['datetime'])
 consumption = consumer_data(dataset)
+all_modules = pvsystem.retrieve_sam(name='SandiaMod')
+module_names = list(all_modules.columns)
+
 
 ## GUI is created here
 app.layout = html.Div([
@@ -121,7 +125,13 @@ app.layout = html.Div([
     ], className='row my-2'),
     html.Div([
         html.Div([
-            dcc.Graph(id='graph-with-slider', config={'displayModeBar': False})], className='col-6'),
+            html.Div([
+                dcc.Graph(id='graph-with-slider', config={'displayModeBar': False})
+            ], className= 'row'),
+            html.Div([
+                dcc.Graph(id='graph_solpower', config={'displayModeBar': False})
+            ], className='row')
+        ],className= 'col-6'),
         html.Div([
             html.Div([
                 html.H4('Energy System', className='col-12'),
@@ -140,7 +150,11 @@ app.layout = html.Div([
                     dcc.Dropdown(
                         id='select_database',
                         options=[{'label': [cell.name+' ('+str(cell.efficiency)+'%)'], 'value': cell.name} for cell in all_cells
-                                 ], value='LG')
+                                 ], value='LG'),
+                    dcc.Dropdown(
+                        id='sandia_database',
+                        options=[{'label': module, 'value': module} for module in all_modules],
+                        value= 'Canadian_Solar_CS5P_220M___2009_'),
                 ], className='col-4 offset-md-1'),
                 html.Div([
 
@@ -250,6 +264,7 @@ def display_confirm(submit_n_clicks):
     [dash.dependencies.Input('select_Graph', 'value'),
      dash.dependencies.Input('select_calc', 'value'),
      dash.dependencies.Input('select_database', 'value'),
+     dash.dependencies.Input('sandia_database','value'),
      dash.dependencies.Input('button_calc', 'n_clicks'),
      dash.dependencies.Input('output-provider2', 'value')],
     [dash.dependencies.State('cost_bat', 'value'),
@@ -260,7 +275,7 @@ def display_confirm(submit_n_clicks):
      dash.dependencies.State('A_cells', 'value'),
      dash.dependencies.State('editable-table', 'data')],
 )
-def update_cost(sel_graph, sel_calc, sel_cell, n_clicks, loc_rad, cost_bat, cap_bat, years_input, cost_kwh, cost_wp,
+def update_cost(sel_graph, sel_calc, sel_cell, module, n_clicks, loc_rad, cost_bat, cap_bat, years_input, cost_kwh, cost_wp,
                 area_cells, rows):
     ##Update everything with input data
     Temp = 298  # Ambient Temperature
@@ -318,6 +333,16 @@ def update_cost(sel_graph, sel_calc, sel_cell, n_clicks, loc_rad, cost_bat, cap_
     p_cons = []
 
     if n_clicks:
+
+        # Solar Model
+        sol2 = Solar2()
+        sol2.get_location('Munich')
+        times = pd.DatetimeIndex(start='2016-01-01', end='2016-12-31', freq='1h', tz=sol2.tz)
+        irradiation = sol2.calc_irrad(times,sol2.latitude,sol2.longitude,sol2.tz,'Munich')
+        power= sol2.pv_system(times, irradiation,module)
+
+        # End Solar Model
+
 
         sol = Solar(rad_val)
         area_cells = float(area_cells)
