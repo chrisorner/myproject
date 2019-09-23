@@ -10,25 +10,26 @@ import requests
 import numpy as np
 import pandas as pd
 from geopy.geocoders import Nominatim
+from geopy.exc import GeocoderTimedOut
 # finally, we import the pvlib library
 import pvlib
 from pvlib import pvsystem
-from pvlib.forecast import GFS, NAM, NDFD, HRRR, RAP
+#from pvlib.forecast import GFS, NAM, NDFD, HRRR, RAP
 
 np.set_printoptions(threshold=np.nan)
 from scipy.optimize import fsolve
 
 
-class Solar:
+#class Solar:
 
-    def __init__(self, rad):
-        t_ges = len(rad)
-        self.P_solar = np.zeros(t_ges)
+#    def __init__(self, rad):
+#        t_ges = len(rad)
+#        self.P_solar = np.zeros(t_ges)
 
-    def calc_power(self, rad, area, cell):
-        efficiency = cell.efficiency
-        self.P_solar = [i*area*efficiency/100 for i in rad]
-        return self.P_solar
+#    def calc_power(self, rad, area, cell):
+#        efficiency = cell.efficiency
+#        self.P_solar = [i*area*efficiency/100 for i in rad]
+#        return self.P_solar
 
 
 class Solar2:
@@ -40,20 +41,27 @@ class Solar2:
         self.tz= 'CET'
         self.surface_tilt = 30
         self.surface_azimuth = 180
-        self.sun_zen= 0
-        self.air_mass= 0
+        self.sun_zen = 0
+        self.air_mass = 0
+        self.area = 0
+        self.efficiency = 0
 
     def get_location(self, city):
         geolocator = Nominatim(user_agent="Enefso")
-        location = geolocator.geocode(city)
-        self.longitude = location.longitude
-        self.latitude = location.latitude
+        try:
+            location = geolocator.geocode(city)
+            self.longitude = location.longitude
+            self.latitude = location.latitude
+        except GeocoderTimedOut:
+            self.longitude = 2.3514992
+            self.latitude = 48.8566101
 
 
-    def forecast(self, lat, long, start, end):
-        fm = GFS()
-        forecast_data = fm.get_processed_data(lat, long, start, end)
-        return forecast_data
+
+ #   def forecast(self, lat, long, start, end):
+ #       fm = GFS()
+ #       forecast_data = fm.get_processed_data(lat, long, start, end)
+ #       return forecast_data
 
     def calc_irrad(self, times, lat, lon, tz, city):
         tus= pvlib.location.Location(lat, lon, tz=tz, altitude=0, name=city)
@@ -62,6 +70,7 @@ class Solar2:
         self.sun_zen = ephem_data['apparent_zenith']
         self.air_mass = pvlib.atmosphere.get_relative_airmass(self.sun_zen)
         dni_et = pvlib.irradiance.get_extra_radiation(times.dayofyear)
+        
 
         total = pvlib.irradiance.get_total_irradiance(
             self.surface_tilt, self.surface_azimuth,
@@ -73,7 +82,7 @@ class Solar2:
 
         return total
 
-    def pv_system(self,times, irrad, module):
+    def pv_system(self,times, irrad, module, cell_area):
 
         wind= pd.Series(5,index= times)
         temp= pd.Series(20, index= times)
@@ -85,6 +94,10 @@ class Solar2:
 
         sandia_modules = pvsystem.retrieve_sam(name='SandiaMod')
         sandia_module = sandia_modules[module]
+        self.area= sandia_module.loc['Area']
+        I_mp = sandia_module.loc['Impo']
+        V_mp = sandia_module.loc['Vmpo']
+        self.efficiency = (I_mp*V_mp)/(self.area*1000)
         #sandia_module= module
         #module_names = list(sandia_modules.columns)
 
@@ -95,9 +108,10 @@ class Solar2:
             irrad['poa_direct'], irrad['poa_diffuse'],
             am_abs, aoi, sandia_module)
 
-        sapm_1 = pvlib.pvsystem.sapm(effective_irradiance, pvtemp['temp_cell'], sandia_module)
+        module_power = pvlib.pvsystem.sapm(effective_irradiance, pvtemp['temp_cell'], sandia_module)
+        total_power = module_power['p_mp']/self.area*cell_area
 
-        return sapm_1['p_mp'].values
+        return total_power.values
 
 
 class Battery:
@@ -114,8 +128,7 @@ class Battery:
         self.p_store = np.zeros(t_ges) # Power that goes into battery
 
     def get_soc(self):
-        x = self.SOC
-        return x
+        return self.SOC
 
     def get_w_unused(self):
         # Energy which is not used or stored
@@ -130,33 +143,28 @@ class Battery:
         x = self.from_grid
         return x
 
-    def calc_soc(self, rad, bat_capacity, cons_ener, cell_area, cell):
+    def calc_soc(self, rad, bat_capacity, cons_ener, p_mpp):
         t_len = int(len(rad))
         # Wmax input from GUI
         self.w_max = int(bat_capacity)
-        sol = Solar(rad)
-        p_mpp = sol.calc_power(rad, cell_area, cell)
+
         for i in range(np.size(cons_ener)):
             self.p_store[i] = p_mpp[i] / 1000 - cons_ener[i]
-
 
         for i in range(t_len):
             # battery is neither full nor empty and can be charged/discharged
             if (self.stored_energy[i - 1] + self.p_store[i] >= 0) and (
                     self.stored_energy[i - 1] + self.p_store[i] <= self.w_max):  # charge
                 # Pmpp from solargen
-                self.stored_energy[i] = self.stored_energy[i] + self.p_store[i]
-                self.W_unused[i] = self.W_unused[i - 1]
-
-
+                self.stored_energy[i] = self.stored_energy[i-1] + self.p_store[i]
+                self.W_unused[i] = 0
 
             # battery empty and cannot be discharged
             elif self.stored_energy[i - 1] + self.p_store[i] < 0:
                 self.stored_energy[i] = 0
-                self.W_unused[i] = self.W_unused[i - 1]
+                self.W_unused[i] = 0
                 self.from_grid[i] = abs(self.p_store[i])
                 # print(i)
-
 
             # battery full and cannot be charged
             elif self.stored_energy[i - 1] + self.p_store[i] > self.w_max:
@@ -217,21 +225,17 @@ class Costs:
         p_kw = (float(power) / 1000)
         invest_per_kw= float(cost_per_kwp)
 
+        # todo: review invest cost (seems too low)
         invest = p_kw**(-0.16) * p_kw * invest_per_kw * (1+0.19)
         return invest
 
-    def calc_costs(self, rad, inp_years, capacity, cost_bat, power, cost_per_kwp, cons_ener, panel_area, cell):
+    def calc_costs(self, rad, inp_years, capacity, cost_bat, power, cost_per_kwp, cons_ener, pow_from_grid, pow_sell):
         # cost calculated for 6 days without investmetn  costs using global d_len
 
         cost_battery = self.battery_invest(capacity, cost_bat)
         cost_solar = self.solar_invest(power, cost_per_kwp)
 
         p_cons = cons_ener  # power req by consumer
-
-        bat = Battery(rad)
-        bat.calc_soc(rad, capacity, cons_ener, panel_area, cell)
-        pow_from_grid = bat.get_from_grid()
-        pow_sell = bat.get_w_unused()
 
 
         if len(rad) < 145:  # indicates forecast, then without investment
@@ -247,6 +251,7 @@ class Costs:
 
             # calc the costs for the energy required from the grid (with solar panels)
             for i in range(self.t_len):
+
 
                 # calc the daily costs without solar panels (1 year)
                 self.cons_year[i + 1] = self.cons_year[i] + p_cons[i]
