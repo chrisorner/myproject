@@ -5,6 +5,7 @@ import dash
 import dash_table as dt
 import dash_core_components as dcc
 import dash_html_components as html
+import dash_daq as daq
 import plotly.graph_objs as go
 import pandas as pd
 from flask import Flask
@@ -15,6 +16,7 @@ from get_local_rad import create_rad
 from get_local_rad2 import create_rad_jrc
 from read_house_hold_data3 import consumer_data
 from calculations import Solar2, Battery, Costs
+from read_alpg_data import alpg_read_data
 import datetime
 import pvlib
 from pvlib import pvsystem
@@ -40,34 +42,36 @@ server = Flask(__name__)
 #    hostname="chrisorn.mysql.pythonanywhere-services.com",
 #    databasename="chrisorn$test",
 # )
-#SQLALCHEMY_DATABASE_URI = "mysql+mysqlconnector://{username}:{password}@{hostname}/{databasename}".format(
-#    username="root",
-#    password="Handball",
-#    hostname="localhost",
-#    databasename="energyapp",
-#)
+SQLALCHEMY_DATABASE_URI = "mysql://{username}:{password}@{hostname}/{databasename}".format(
+    username="root",
+    password="Handball",
+    hostname="localhost",
+    databasename="energyapp",
+)
 
-#server.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
-#server.config["SQLALCHEMY_POOL_RECYCLE"] = 299
-#server.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+server.config["SQLALCHEMY_DATABASE_URI"] = SQLALCHEMY_DATABASE_URI
+server.config["SQLALCHEMY_POOL_RECYCLE"] = 299
+server.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-#db = SQLAlchemy(server)
-
-
-#class SolarCell(db.Model):
-#    __tablename__ = "Photovoltaik"
-
-#    id = db.Column(db.Integer, primary_key=True)
-#    name = db.Column(db.String(30))
-#    efficiency = db.Column(db.Float)
-
-#    def __init__(self, id, name, efficiency):
-#        self.id = id
-#        self.name = name
-#        self.efficiency = efficiency
+db = SQLAlchemy(server)
 
 
-#all_cells = SolarCell.query.all()
+class BatteryDB(db.Model):
+    __tablename__ = "Photovoltaik"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(30))
+    capacity = db.Column(db.Float)
+    cost = db.Column(db.Float)
+
+    def __init__(self, id, name, capacity, bat_cost):
+        self.id = id
+        self.name = name
+        self.capacity = capacity
+        self.cost = bat_cost
+
+
+all_batteries = BatteryDB.query.all()
 
 ## End of SQL stuff
 
@@ -94,6 +98,8 @@ dataset = pd.read_csv('household_power_consumption1.csv', header=0, infer_dateti
 consumption = consumer_data(dataset)
 all_modules = pvsystem.retrieve_sam(name='SandiaMod')
 module_names = list(all_modules.columns)
+
+alpg_data = alpg_read_data()
 
 ## GUI is created here
 app.layout = html.Div([
@@ -138,26 +144,38 @@ app.layout = html.Div([
                 html.Div([
                     html.Label('Solar Panels Area [m2]', id='A_cells_label'),
                     dcc.Input(id='A_cells', value='50', type='text', className='form-control')
-                ], className='col-3 offset-md-1'),
+                ], className='col-4 offset-md-1'),
                 html.Div([
                     html.Label('Battery Capacity [kWh]', id='cap_label'),
                     dcc.Input(id='capacity', value='5', type='text', className='form-control')
-                ], className='col-3 offset-md-1')
+                ], className='col-4 offset-md-1')
             ], className='row my-4'),
+
             html.Div([
                 html.H4('Select Solar Panel', className='col-12'),
+                html.Label('Select Battery from Database'),
+                daq.BooleanSwitch(
+                  id='checkbox_battery',
+                  on=True
+                )
+            ], className='row my-4'),
+            html.Div([
                 html.Div([
-                #    dcc.Dropdown(
-                #        id='select_database',
-                #        options=[{'label': [cell.name + ' (' + str(cell.efficiency) + '%)'], 'value': cell.name} for
-                 #                cell in all_cells
-                 #                ], value='LG'),
+                    html.Label('Batteries'),
+                    dcc.Dropdown(
+                        id='battery_database',
+                        options=[{'label': [bat.name + ' (' + str(bat.capacity) + 'kWh)'], 'value': bat.name} for
+                                 bat in all_batteries
+                                 ], value='Tesla')
+                ], className='col-4'),
+                html.Div([
+                    html.Label('Solar Panels'),
                     dcc.Dropdown(
                         id='sandia_database',
                         options=[{'label': module, 'value': module} for module in all_modules],
                         value='Canadian_Solar_CS5P_220M___2009_'),
                 ], className='col-4')
-            ], className='row my-4'),
+            ],className='row my-4'),
             html.Div([
                 html.Div([
                     html.Label('Panel Tilt [Deg]', id='tilt'),
@@ -220,13 +238,17 @@ app.layout = html.Div([
     html.Div([
         html.H4('Database', className='col-12'),
         html.Div([
-            html.Label('Type of Solar Panel', id='typeSP_label'),
-            dcc.Input(id='typeSP', type='text', className='form-control'),
-        ], className='col-3'),
+            html.Label('Battery Name', id='typeCap_label'),
+            dcc.Input(id='type_bat', type='text', className='form-control'),
+        ], className='col-2'),
         html.Div([
-            html.Label('Efficiency', id='efficiencySP_label'),
-            dcc.Input(id='efficiency', type='text', className='form-control')
-        ], className='col-3'),
+            html.Label('Battery Capacity', id='efficiencySP_label'),
+            dcc.Input(id='inp_capacity', type='text', className='form-control')
+        ], className='col-2'),
+        html.Div([
+            html.Label('Battery Cost'),
+            dcc.Input(id='inp_bat_cost', type='text', className='form-control')
+        ], className='col-2'),
         html.Div([
             dcc.ConfirmDialogProvider(children=html.Button('Submit', id='button',
                                                            className='btn btn-primary'), id='confirm',
@@ -244,21 +266,54 @@ app.layout = html.Div([
         html.Div(id='store_solar_costs', style={'display': 'none'}),
         html.Div(id='store_location', style={'display': 'none'})
     ], className='row my-4 align-items-end'),
+    html.Div([
+        html.Div([
+            dcc.Graph(id='cons_graph', config={'displayModeBar': False})
+        ], className= 'col-6'),
+        html.Div([
+            dcc.Checklist(id= 'checkbox_cons_data',
+                options=[
+                    {'label': 'Total Energy', 'value': 'Total'},
+                    {'label': 'Electronics', 'value': 'Electronics'},
+                    {'label': 'Fridge', 'value': 'Fridge'},
+                    {'label': 'Inductive', 'value': 'Inductive'},
+                    {'label': 'Lighting', 'value': 'Lighting'},
+                    {'label': 'Other', 'value': 'Other'},
+                    {'label': 'Standby', 'value': 'Standby'}
+                ],
+                value=['Total'],
+            )
+        ], className= 'col-1'),
+        html.Div([
+            dcc.Dropdown(
+                id='season',
+                options=[
+                        {'label': 'Spring', 'value': 'spring'},
+                        {'label': 'Summer', 'value': 'summer'},
+                        {'label': 'Autumn', 'value': 'autumn'},
+                        {'label': 'Winter', 'value': 'winter'}
+                         ], value='summer')
+        ], className= 'col-2')
+
+            ], className='row my-4 align-items-center'),
 ], className='mx-3')
 
 
 
 @app.callback(
     dash.dependencies.Output('placeholder_database_entry', 'children'),
-    [dash.dependencies.Input('button', 'n_clicks')],
-    [dash.dependencies.State('typeSP', 'value'),
-     dash.dependencies.State('efficiency', 'value')])
+    [dash.dependencies.Input('confirm', 'submit_n_clicks')],
+    [dash.dependencies.State('type_bat', 'value'),
+     dash.dependencies.State('inp_capacity', 'value'),
+     dash.dependencies.State('inp_bat_cost', 'value')]
+)
 # Add new solar cell to database
-#def update_db(n_clicks, typeSP, effic):
-#    if n_clicks is not None:
-#        new_entry = SolarCell(None, typeSP, effic)
-#        db.session.add(new_entry)
-#        db.session.commit()
+def update_db(submit_n_clicks, type_bat, cap, bat_cost):
+    if submit_n_clicks is not None:
+        with server.app_context():
+            new_entry = BatteryDB(None, type_bat, cap, bat_cost)
+            db.session.add(new_entry)
+            db.session.commit()
 
 
 @app.callback(dash.dependencies.Output('placeholder_confirm', 'children'),
@@ -285,9 +340,11 @@ def change_loc(n_clicks, location):
      dash.dependencies.Output('store_grid_costs', 'children'),
      dash.dependencies.Output('store_solar_costs', 'children')],
     [dash.dependencies.Input('sandia_database', 'value'),
+     dash.dependencies.Input('battery_database', 'value'),
      dash.dependencies.Input('store_location', 'children'),
      dash.dependencies.Input('button_calc', 'n_clicks')],
     [dash.dependencies.State('cost_bat', 'value'),
+     dash.dependencies.State('checkbox_battery','on'),
      dash.dependencies.State('capacity', 'value'),
      dash.dependencies.State('years', 'value'),
      dash.dependencies.State('cost_kwh', 'value'),
@@ -297,7 +354,7 @@ def change_loc(n_clicks, location):
      dash.dependencies.State('panel_orient','value')
      ],
 )
-def update_cost(module, loc, n_clicks, cost_bat, cap_bat, years_input, cost_kwh, cost_wp,
+def update_cost(module,battery_sel, loc, n_clicks, cost_bat, database_bat, cap_bat, years_input, cost_kwh, cost_wp,
                 area_cells, tilt, orient):
     ##Update everything with input data
     Temp = 298  # Ambient Temperature
@@ -324,11 +381,20 @@ def update_cost(module, loc, n_clicks, cost_bat, cap_bat, years_input, cost_kwh,
     df_num = pd.to_numeric(dff['Global_active_power'])
     df_num = df_num.values
 
- #   for cell in all_cells:
-  #      if cell.name == sel_cell:
-  #          cell_obj = cell
+    for bat in all_batteries:
+        if bat.name == battery_sel:
+            bat_obj = bat
+
+
+    if database_bat == True:
+        bat_capacity = bat_obj.capacity
+        bat_cost = bat_obj.cost
+    else:
+        bat_capacity = cap_bat
+        bat_cost = float(cost_bat) * float(cap_bat)
 
     #if n_clicks:
+
         # Solar Model
     area_cells = float(area_cells)
     tilt = float(tilt)
@@ -350,13 +416,13 @@ def update_cost(module, loc, n_clicks, cost_bat, cap_bat, years_input, cost_kwh,
     #        p_sol = sol.calc_power(rad_val, area_cells, cell_obj)
     p_peak = area_cells * sol2.efficiency * 1000
     bat = Battery(irrad_global)
-    bat.calc_soc(irrad_global, cap_bat, df_num, p_sol)
+    bat.calc_soc(irrad_global, bat_capacity, df_num, p_sol)
     e_batt = bat.get_stored_energy()
     e_grid = bat.get_from_grid()
     e_sell = bat.get_w_unused()
 
     cost = Costs(irrad_global, years_input, cost_kwh, p_peak)
-    cost.calc_costs(irrad_global, years_input, cap_bat, cost_bat, p_peak, cost_wp, df_num, e_grid, e_sell)
+    cost.calc_costs(irrad_global, years_input, bat_cost, p_peak, cost_wp, df_num, e_grid, e_sell)
     grid_costs = cost.total_costs
     solar_costs = cost.total_costs_sol
 
@@ -561,8 +627,58 @@ def update_graph_costs(sel_plot, years_input, rad_val_json, e_batt_json, e_grid_
 #                )
 #    }
 
+@app.callback(
+    dash.dependencies.Output('cons_graph', 'figure'),
+    [dash.dependencies.Input('button_calc', 'n_clicks'),
+     dash.dependencies.Input('checkbox_cons_data', 'value'),
+     dash.dependencies.Input('season', 'value')])
+
+def change_loc(n_clicks, sel_output, season):
+
+    if season == 'spring':
+        start= pd.Timestamp('2018-03-21')
+        end= pd.Timestamp('2018-06-20 23:59:00')
+    elif season == 'summer':
+        start = pd.Timestamp('2018-06-21')
+        end = pd.Timestamp('2018-09-20 23:59:00')
+    elif season == 'autumn':
+        start = pd.Timestamp('2018-09-21')
+        end = pd.Timestamp('2018-12-20 23:59:00')
+    else:
+        start = pd.Timestamp('2018-01-01')
+        end = pd.Timestamp('2018-03-20 23:59:00')
+
+#    start = pd.Timestamp('2018-08-01')
+ #   end = pd.Timestamp('2018-08-31 23:59:00')
+ #   end1 = pd.Timestamp('2018-08-01 23:59:00')
+    select = (alpg_data.index >= start) & (alpg_data.index <= end)
+
+    data_range = alpg_data.loc[select]
+
+    traces = []
+    for data in sel_output:
+        traces.append(go.Scatter(
+            x=data_range.index,
+            y=data_range[data],
+            mode='lines',
+            name= data,
+            marker={
+                'size': 5,
+                'line': {'width': 0.5, 'color': 'blue'}
+            },
+        ))
+
+    return {
+        'data': traces,
+        'layout': go.Layout(
+            title='alpg consumer data',
+            xaxis={'title': 'Time'},
+            yaxis={'title': 'Power Consumption [W]'},
+            legend=dict(x=-.1, y=1.2))
+
+    }
 
 app.css.append_css({"external_url": "https://codepen.io/chriddyp/pen/brPBPO.css"})
 
 if __name__ == '__main__':
-    app.run_server(debug = False)
+    app.run_server()

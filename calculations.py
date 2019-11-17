@@ -67,6 +67,7 @@ class Solar2:
         tus= pvlib.location.Location(lat, lon, tz=tz, altitude=0, name=city)
         ephem_data = tus.get_solarposition(times)
         irrad_data = tus.get_clearsky(times)
+        irrad_data.to_csv('irrad_data',index= False)
         self.sun_zen = ephem_data['apparent_zenith']
         self.air_mass = pvlib.atmosphere.get_relative_airmass(self.sun_zen)
         dni_et = pvlib.irradiance.get_extra_radiation(times.dayofyear)
@@ -225,14 +226,14 @@ class Costs:
         p_kw = (float(power) / 1000)
         invest_per_kw= float(cost_per_kwp)
 
-        # todo: review invest cost (seems too low)
         invest = p_kw**(-0.16) * p_kw * invest_per_kw * (1+0.19)
         return invest
 
-    def calc_costs(self, rad, inp_years, capacity, cost_bat, power, cost_per_kwp, cons_ener, pow_from_grid, pow_sell):
+    def calc_costs(self, rad, inp_years, cost_bat, power, cost_per_kwp, cons_ener, pow_from_grid, pow_sell):
         # cost calculated for 6 days without investmetn  costs using global d_len
 
-        cost_battery = self.battery_invest(capacity, cost_bat)
+        #cost_battery = self.battery_invest(capacity, cost_bat)
+        cost_battery = cost_bat
         cost_solar = self.solar_invest(power, cost_per_kwp)
 
         p_cons = cons_ener  # power req by consumer
