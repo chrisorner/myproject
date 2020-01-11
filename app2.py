@@ -64,13 +64,13 @@ class BatteryDB(db.Model):
     capacity = db.Column(db.Float)
     cost = db.Column(db.Float)
 
-    def __init__(self, id, name, capacity, bat_cost):
-        self.id = id
+    def __init__(self, name, capacity, bat_cost):
+#        self.id = id
         self.name = name
         self.capacity = capacity
         self.cost = bat_cost
 
-
+db.create_all()
 all_batteries = BatteryDB.query.all()
 
 ## End of SQL stuff
@@ -116,27 +116,55 @@ app.layout = html.Div([
                     {'label': 'Costs', 'value': 'cost_graph'}
                 ], value= 'rad_graph')
         ], className='col-3'),
-     #   html.Div([
-      #      html.H5('Select Calculation'),
-      #      dcc.Dropdown(
-      #          id='select_calc',
-      #          options=[
-      #              {'label': 'Investment Analysis', 'value': 'invest'},
-       #             {'label': 'Forecast', 'value': 'forec'}
-       #         ])
-      #  ], className='col-3')
+
     ], className='row'),
     html.Div([
         html.Div([html.Button('Start Calculation', id='button_calc', className='btn btn-primary')], className='col-3')
     ], className='row my-2'),
     html.Div([
         html.Div([
-            html.Div([
-                dcc.Graph(id='graph-with-slider', config={'displayModeBar': False})
-            ], className='row'),
-            html.Div([
-                dcc.Graph(id='graph_solpower', config={'displayModeBar': False})
-            ], className='row')
+            dcc.Tabs(id="tabs-graph", value='tab-cost', children=[
+            dcc.Tab(label='Costs', value='tab-cost', children=[
+                html.Div([
+                    dcc.Graph(id='graph-with-slider', config={'displayModeBar': False})
+                    ])]),
+            dcc.Tab(label='Consumption', value='tab-cons', children=[
+                html.Div([
+                    dcc.Graph(id='cons_graph', config={'displayModeBar': False})
+            ]),
+                html.Div([
+                    dcc.Checklist(id= 'checkbox_cons_data',
+                        options=[
+                            {'label': ' Total Energy', 'value': 'Total'},
+                            {'label': ' Electronics', 'value': 'Electronics'},
+                            {'label': ' Fridge', 'value': 'Fridge'},
+                            {'label': ' Inductive', 'value': 'Inductive'},
+                            {'label': ' Lighting', 'value': 'Lighting'},
+                            {'label': ' Other', 'value': 'Other'},
+                            {'label': ' Standby', 'value': 'Standby'}
+                        ],
+                        value=['Total'],
+                    )
+                ], className= 'col-2'),
+                html.Div([
+                dcc.Dropdown(
+                    id='season',
+                    options=[
+                            {'label': 'Spring', 'value': 'spring'},
+                            {'label': 'Summer', 'value': 'summer'},
+                            {'label': 'Autumn', 'value': 'autumn'},
+                            {'label': 'Winter', 'value': 'winter'}
+                             ], value='summer')
+                ], className= 'col-4')
+            ]),
+            dcc.Tab(label='Solar Power', value='tab-power', children=[
+                html.Div([
+                    dcc.Graph(id='graph_solpower', config={'displayModeBar': False})
+                ]),
+
+            ])
+            ]),
+
         ], className='col-6'),
         html.Div([
             html.Div([
@@ -164,9 +192,13 @@ app.layout = html.Div([
                     html.Label('Batteries'),
                     dcc.Dropdown(
                         id='battery_database',
-                        options=[{'label': [bat.name + ' (' + str(bat.capacity) + 'kWh)'], 'value': bat.name} for
+                        options=[{'label': bat.name , 'value': bat.name} for
                                  bat in all_batteries
-                                 ], value='Tesla')
+                                 ], value= 'Tesla')
+ #                       options= [
+ #                           {'label': 'Tesla', 'value': 'Tesla'},
+ #                           {'label': 'LG', 'value': 'LG'}
+ #                       ], value='Tesla'),
                 ], className='col-4'),
                 html.Div([
                     html.Label('Solar Panels'),
@@ -204,7 +236,15 @@ app.layout = html.Div([
                 html.Div([
                     html.Label('Number of Years', id='years_label'),
                     dcc.Input(id='years', value='20', type='number', className='form-control')
-                ], className='col-2')
+                ], className='col-2'),
+                html.Div([
+                    html.Label('Increase of Energy Cost', id='inc_cost_label'),
+                    dcc.Input(id='inc_cost_ener', value='0.01', type='text', className='form-control')
+                ], className='col-2'),
+                html.Div([
+                    html.Label('Inflation', id='inflation_label'),
+                    dcc.Input(id='inflation', value='0.02', type='text', className='form-control')
+                ], className='col-2'),
             ], className='row my-4 align-items-end'),
             html.Div([
                 html.H4('Energy System', className='col-12'),
@@ -254,7 +294,15 @@ app.layout = html.Div([
                                                            className='btn btn-primary'), id='confirm',
                                       message='Solar cell was added to database')
         ]),
+        html.Div([
+            dcc.ConfirmDialogProvider(children=html.Button('Clear DB', id='delte_button',
+                                                           className='btn btn-primary'), id='confirm_delete',
+                                      message='Database has been cleared')
+        ]),
+
+
         html.P(id='placeholder_database_entry', style={'display': 'none'}),
+        html.Div(id= 'placeholder_delete_db',style={'display': 'none'}),
         html.Div(id='placeholder_confirm', style={'display': 'none'}),
         html.Div(id='store_p_sol', style={'display': 'none'}),
         html.Div(id='store_p_cons', style={'display': 'none'}),
@@ -266,36 +314,9 @@ app.layout = html.Div([
         html.Div(id='store_solar_costs', style={'display': 'none'}),
         html.Div(id='store_location', style={'display': 'none'})
     ], className='row my-4 align-items-end'),
-    html.Div([
-        html.Div([
-            dcc.Graph(id='cons_graph', config={'displayModeBar': False})
-        ], className= 'col-6'),
-        html.Div([
-            dcc.Checklist(id= 'checkbox_cons_data',
-                options=[
-                    {'label': 'Total Energy', 'value': 'Total'},
-                    {'label': 'Electronics', 'value': 'Electronics'},
-                    {'label': 'Fridge', 'value': 'Fridge'},
-                    {'label': 'Inductive', 'value': 'Inductive'},
-                    {'label': 'Lighting', 'value': 'Lighting'},
-                    {'label': 'Other', 'value': 'Other'},
-                    {'label': 'Standby', 'value': 'Standby'}
-                ],
-                value=['Total'],
-            )
-        ], className= 'col-1'),
-        html.Div([
-            dcc.Dropdown(
-                id='season',
-                options=[
-                        {'label': 'Spring', 'value': 'spring'},
-                        {'label': 'Summer', 'value': 'summer'},
-                        {'label': 'Autumn', 'value': 'autumn'},
-                        {'label': 'Winter', 'value': 'winter'}
-                         ], value='summer')
-        ], className= 'col-2')
 
-            ], className='row my-4 align-items-center'),
+
+
 ], className='mx-3')
 
 
@@ -311,9 +332,23 @@ app.layout = html.Div([
 def update_db(submit_n_clicks, type_bat, cap, bat_cost):
     if submit_n_clicks is not None:
         with server.app_context():
-            new_entry = BatteryDB(None, type_bat, cap, bat_cost)
+            new_entry = BatteryDB(type_bat, cap, bat_cost)
             db.session.add(new_entry)
             db.session.commit()
+
+@app.callback(
+    dash.dependencies.Output('placeholder_delete_db', 'children'),
+    [dash.dependencies.Input('confirm_delete', 'submit_n_clicks')]
+)
+# Delete Database
+def delete_db(submit_n_clicks):
+    if submit_n_clicks is not None:
+        with server.app_context():
+        #    BatteryDB.query.delete()
+        #    db.session.commit()
+            db.drop_all()
+         #   db.create_all()
+
 
 
 @app.callback(dash.dependencies.Output('placeholder_confirm', 'children'),
@@ -351,11 +386,13 @@ def change_loc(n_clicks, location):
      dash.dependencies.State('cost_wp', 'value'),
      dash.dependencies.State('A_cells', 'value'),
      dash.dependencies.State('panel_tilt','value'),
-     dash.dependencies.State('panel_orient','value')
+     dash.dependencies.State('panel_orient','value'),
+     dash.dependencies.State('inc_cost_ener','value'),
+     dash.dependencies.State('inflation','value'),
      ],
 )
 def update_cost(module,battery_sel, loc, n_clicks, cost_bat, database_bat, cap_bat, years_input, cost_kwh, cost_wp,
-                area_cells, tilt, orient):
+                area_cells, tilt, orient, cost_inc, infl):
     ##Update everything with input data
     Temp = 298  # Ambient Temperature
     years_input = int(years_input)
@@ -396,6 +433,8 @@ def update_cost(module,battery_sel, loc, n_clicks, cost_bat, database_bat, cap_b
     #if n_clicks:
 
         # Solar Model
+    cost_inc= float(cost_inc)
+    infl = float(infl)
     area_cells = float(area_cells)
     tilt = float(tilt)
     orient = float(orient)
@@ -421,7 +460,7 @@ def update_cost(module,battery_sel, loc, n_clicks, cost_bat, database_bat, cap_b
     e_grid = bat.get_from_grid()
     e_sell = bat.get_w_unused()
 
-    cost = Costs(irrad_global, years_input, cost_kwh, p_peak)
+    cost = Costs(irrad_global, years_input, cost_kwh, p_peak, cost_inc, infl)
     cost.calc_costs(irrad_global, years_input, bat_cost, p_peak, cost_wp, df_num, e_grid, e_sell)
     grid_costs = cost.total_costs
     solar_costs = cost.total_costs_sol
@@ -681,4 +720,4 @@ def change_loc(n_clicks, sel_output, season):
 app.css.append_css({"external_url": "https://codepen.io/chriddyp/pen/brPBPO.css"})
 
 if __name__ == '__main__':
-    app.run_server()
+    app.run_server(debug = True)

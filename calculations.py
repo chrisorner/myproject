@@ -178,14 +178,14 @@ class Battery:
 
 
 class Costs:
-    def __init__(self, rad, inp_years, cost_kwh, power):
+    def __init__(self, rad, inp_years, cost_kwh, power, cost_inc, infl):
         self.t_len = int(len(rad))
         if len(rad) < 145:
             time_frame = self.t_len
         else:
             time_frame = inp_years
 
-        self.cost_energy_inc = 0.01
+        self.cost_energy_inc = cost_inc
         self.cost_basic = 100
         self.cost_kwh = float(cost_kwh)
         years = np.arange(inp_years)
@@ -194,7 +194,7 @@ class Costs:
         cost_dep = 5 * power / 1000 # cost depending on power consumption
         # Operational costs incl repair
         self.cost_operate = self.cost_fix + cost_dep
-        self.inflation= 0.02
+        self.inflation= infl
         self.feedInTariff = 0.1147 #€/kwh
 
         self.cons_year = np.zeros(self.t_len + 1)  # index 0 is always 0, costs start at index 1
