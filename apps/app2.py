@@ -80,7 +80,8 @@ all_batteries = BatteryDB.query.all()
 app = dash.Dash(__name__, server=server)
 
 app.title = 'Energy Systems Simulator'
-external_stylesheets = ['https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css', 'https://codepen.io/chriddyp/pen/brPBPO.css']
+external_stylesheets = ['https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css']
+#    , 'https://codepen.io/chriddyp/pen/brPBPO.css']
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
 
@@ -717,7 +718,7 @@ def change_loc(n_clicks, sel_output, season):
 
     }
 
-app.css.append_css({"external_url": "https://codepen.io/chriddyp/pen/brPBPO.css"})
+#app.css.append_css({"external_url": "https://codepen.io/chriddyp/pen/brPBPO.css"})
 
 if __name__ == '__main__':
     app.run_server(debug = True)
