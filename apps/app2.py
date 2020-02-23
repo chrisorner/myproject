@@ -1,10 +1,11 @@
 import numpy as np
 import json
 np.set_printoptions(threshold=np.nan)
-import dash
-import dash_table as dt
+from dash.dependencies import Input, Output, State
+from app import app, server
 import dash_core_components as dcc
 import dash_html_components as html
+import dash_bootstrap_components as dbc
 import dash_daq as daq
 import plotly.graph_objs as go
 import pandas as pd
@@ -12,16 +13,11 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 # import requests
 # from geopy.geocoders import Nominatim
-from get_local_rad import create_rad
-from get_local_rad2 import create_rad_jrc
 from read_house_hold_data3 import consumer_data
-from calculations import Solar2, Battery, Costs
+from apps.calculations import Solar2, Battery, Costs
 from read_alpg_data import alpg_read_data
 import datetime
-import pvlib
 from pvlib import pvsystem
-
-import matplotlib.pyplot as plt
 
 ## same function also in calculations file. Global variables to be removed
 #
@@ -31,7 +27,7 @@ import matplotlib.pyplot as plt
 # t_ges = np.arange(1, t_len * d_len + 1, 1)
 
 ##Start of Web Application##
-server = Flask(__name__)
+#server = Flask(__name__)
 
 ## connect to SQL Database
 # 1 is for localhost, 1 for deployed app
@@ -77,12 +73,12 @@ all_batteries = BatteryDB.query.all()
 
 
 ### Start of the Application ####
-app = dash.Dash(__name__, server=server)
+#app = dash.Dash(__name__, server=server)
 
-app.title = 'Energy Systems Simulator'
-external_stylesheets = ['https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css']
+#app.title = 'Energy Systems Simulator'
+#external_stylesheets = ['https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css']
 #    , 'https://codepen.io/chriddyp/pen/brPBPO.css']
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+#app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 
 
 # Initialize  user consumption
@@ -100,12 +96,20 @@ consumption = consumer_data(dataset)
 all_modules = pvsystem.retrieve_sam(name='SandiaMod')
 module_names = list(all_modules.columns)
 
-alpg_data = alpg_read_data()
+#alpg_data = alpg_read_data()
 
 ## GUI is created here
-app.layout = html.Div([
+layout = html.Div([
 
-    html.H1('Solar Energy Calculator'),
+    dbc.Nav(
+            [
+                dbc.NavItem(dbc.NavLink('Home Page', href='/')),
+                dbc.NavItem(dbc.NavLink('Load Configuration', href='/apps/app1')),
+                dbc.NavItem(dbc.NavLink('Simulation', active=True, href='/apps/app2'))
+            ],
+            pills=True,
+        ),
+
     html.Div([
         html.Div([
             html.H5('Select Graph'),
@@ -129,35 +133,7 @@ app.layout = html.Div([
                 html.Div([
                     dcc.Graph(id='graph-with-slider', config={'displayModeBar': False})
                     ])]),
-            dcc.Tab(label='Consumption', value='tab-cons', children=[
-                html.Div([
-                    dcc.Graph(id='cons_graph', config={'displayModeBar': False})
-            ]),
-                html.Div([
-                    dcc.Checklist(id= 'checkbox_cons_data',
-                        options=[
-                            {'label': ' Total Energy', 'value': 'Total'},
-                            {'label': ' Electronics', 'value': 'Electronics'},
-                            {'label': ' Fridge', 'value': 'Fridge'},
-                            {'label': ' Inductive', 'value': 'Inductive'},
-                            {'label': ' Lighting', 'value': 'Lighting'},
-                            {'label': ' Other', 'value': 'Other'},
-                            {'label': ' Standby', 'value': 'Standby'}
-                        ],
-                        value=['Total'],
-                    )
-                ], className= 'col-2'),
-                html.Div([
-                dcc.Dropdown(
-                    id='season',
-                    options=[
-                            {'label': 'Spring', 'value': 'spring'},
-                            {'label': 'Summer', 'value': 'summer'},
-                            {'label': 'Autumn', 'value': 'autumn'},
-                            {'label': 'Winter', 'value': 'winter'}
-                             ], value='summer')
-                ], className= 'col-4')
-            ]),
+
             dcc.Tab(label='Solar Power', value='tab-power', children=[
                 html.Div([
                     dcc.Graph(id='graph_solpower', config={'displayModeBar': False})
@@ -323,11 +299,11 @@ app.layout = html.Div([
 
 
 @app.callback(
-    dash.dependencies.Output('placeholder_database_entry', 'children'),
-    [dash.dependencies.Input('confirm', 'submit_n_clicks')],
-    [dash.dependencies.State('type_bat', 'value'),
-     dash.dependencies.State('inp_capacity', 'value'),
-     dash.dependencies.State('inp_bat_cost', 'value')]
+    Output('placeholder_database_entry', 'children'),
+    [Input('confirm', 'submit_n_clicks')],
+    [State('type_bat', 'value'),
+     State('inp_capacity', 'value'),
+     State('inp_bat_cost', 'value')]
 )
 # Add new solar cell to database
 def update_db(submit_n_clicks, type_bat, cap, bat_cost):
@@ -338,8 +314,8 @@ def update_db(submit_n_clicks, type_bat, cap, bat_cost):
             db.session.commit()
 
 @app.callback(
-    dash.dependencies.Output('placeholder_delete_db', 'children'),
-    [dash.dependencies.Input('confirm_delete', 'submit_n_clicks')]
+    Output('placeholder_delete_db', 'children'),
+    [Input('confirm_delete', 'submit_n_clicks')]
 )
 # Delete Database
 def delete_db(submit_n_clicks):
@@ -352,44 +328,44 @@ def delete_db(submit_n_clicks):
 
 
 
-@app.callback(dash.dependencies.Output('placeholder_confirm', 'children'),
-              [dash.dependencies.Input('confirm', 'submit_n_clicks')])
+@app.callback(Output('placeholder_confirm', 'children'),
+              [Input('confirm', 'submit_n_clicks')])
 def display_confirm(submit_n_clicks):
     return ''
 
 @app.callback(
-    dash.dependencies.Output('store_location', 'children'),
-    [dash.dependencies.Input('button_loc', 'n_clicks')],
-    [dash.dependencies.State('location', 'value')])
+    Output('store_location', 'children'),
+    [Input('button_loc', 'n_clicks')],
+    [State('location', 'value')])
 def change_loc(n_clicks, location):
     return location
 
 
 @app.callback(
 
-    [dash.dependencies.Output('store_p_sol', 'children'),
-     dash.dependencies.Output('store_p_cons', 'children'),
-     dash.dependencies.Output('store_rad', 'children'),
-     dash.dependencies.Output('store_e_batt', 'children'),
-     dash.dependencies.Output('store_e_grid', 'children'),
-     dash.dependencies.Output('store_e_sell', 'children'),
-     dash.dependencies.Output('store_grid_costs', 'children'),
-     dash.dependencies.Output('store_solar_costs', 'children')],
-    [dash.dependencies.Input('sandia_database', 'value'),
-     dash.dependencies.Input('battery_database', 'value'),
-     dash.dependencies.Input('store_location', 'children'),
-     dash.dependencies.Input('button_calc', 'n_clicks')],
-    [dash.dependencies.State('cost_bat', 'value'),
-     dash.dependencies.State('checkbox_battery','on'),
-     dash.dependencies.State('capacity', 'value'),
-     dash.dependencies.State('years', 'value'),
-     dash.dependencies.State('cost_kwh', 'value'),
-     dash.dependencies.State('cost_wp', 'value'),
-     dash.dependencies.State('A_cells', 'value'),
-     dash.dependencies.State('panel_tilt','value'),
-     dash.dependencies.State('panel_orient','value'),
-     dash.dependencies.State('inc_cost_ener','value'),
-     dash.dependencies.State('inflation','value'),
+    [Output('store_p_sol', 'children'),
+     Output('store_p_cons', 'children'),
+     Output('store_rad', 'children'),
+     Output('store_e_batt', 'children'),
+     Output('store_e_grid', 'children'),
+     Output('store_e_sell', 'children'),
+     Output('store_grid_costs', 'children'),
+     Output('store_solar_costs', 'children')],
+    [Input('sandia_database', 'value'),
+     Input('battery_database', 'value'),
+     Input('store_location', 'children'),
+     Input('button_calc', 'n_clicks')],
+    [State('cost_bat', 'value'),
+     State('checkbox_battery','on'),
+     State('capacity', 'value'),
+     State('years', 'value'),
+     State('cost_kwh', 'value'),
+     State('cost_wp', 'value'),
+     State('A_cells', 'value'),
+     State('panel_tilt','value'),
+     State('panel_orient','value'),
+     State('inc_cost_ener','value'),
+     State('inflation','value'),
      ],
 )
 def update_cost(module,battery_sel, loc, n_clicks, cost_bat, database_bat, cap_bat, years_input, cost_kwh, cost_wp,
@@ -477,8 +453,8 @@ def update_cost(module,battery_sel, loc, n_clicks, cost_bat, database_bat, cap_b
 
 @app.callback(
 
-    dash.dependencies.Output('graph_solpower', 'figure'),
-    [dash.dependencies.Input('store_p_sol', 'children')])
+    Output('graph_solpower', 'figure'),
+    [Input('store_p_sol', 'children')])
 
 def solar_power(sol_power_json):
 
@@ -510,15 +486,15 @@ def solar_power(sol_power_json):
 
 
 @app.callback(
-    dash.dependencies.Output('graph-with-slider', 'figure'),
-    [dash.dependencies.Input('select_Graph', 'value'),
-    dash.dependencies.Input('years', 'value'),
-    dash.dependencies.Input('store_rad', 'children'),
-    dash.dependencies.Input('store_e_batt', 'children'),
-    dash.dependencies.Input('store_e_grid', 'children'),
-    dash.dependencies.Input('store_e_sell', 'children'),
-    dash.dependencies.Input('store_grid_costs', 'children'),
-    dash.dependencies.Input('store_solar_costs', 'children')],
+    Output('graph-with-slider', 'figure'),
+    [Input('select_Graph', 'value'),
+    Input('years', 'value'),
+    Input('store_rad', 'children'),
+    Input('store_e_batt', 'children'),
+    Input('store_e_grid', 'children'),
+    Input('store_e_sell', 'children'),
+    Input('store_grid_costs', 'children'),
+    Input('store_solar_costs', 'children')],
 )
 
 def update_graph_costs(sel_plot, years_input, rad_val_json, e_batt_json, e_grid_json, e_sell_json, grid_costs_json, solar_costs_json):
@@ -666,59 +642,3 @@ def update_graph_costs(sel_plot, years_input, rad_val_json, e_batt_json, e_grid_
 #                    legend=dict(x=-.1, y=1.2)
 #                )
 #    }
-
-@app.callback(
-    dash.dependencies.Output('cons_graph', 'figure'),
-    [dash.dependencies.Input('button_calc', 'n_clicks'),
-     dash.dependencies.Input('checkbox_cons_data', 'value'),
-     dash.dependencies.Input('season', 'value')])
-
-def change_loc(n_clicks, sel_output, season):
-
-    if season == 'spring':
-        start= pd.Timestamp('2018-03-21')
-        end= pd.Timestamp('2018-06-20 23:59:00')
-    elif season == 'summer':
-        start = pd.Timestamp('2018-06-21')
-        end = pd.Timestamp('2018-09-20 23:59:00')
-    elif season == 'autumn':
-        start = pd.Timestamp('2018-09-21')
-        end = pd.Timestamp('2018-12-20 23:59:00')
-    else:
-        start = pd.Timestamp('2018-01-01')
-        end = pd.Timestamp('2018-03-20 23:59:00')
-
-#    start = pd.Timestamp('2018-08-01')
- #   end = pd.Timestamp('2018-08-31 23:59:00')
- #   end1 = pd.Timestamp('2018-08-01 23:59:00')
-    select = (alpg_data.index >= start) & (alpg_data.index <= end)
-
-    data_range = alpg_data.loc[select]
-
-    traces = []
-    for data in sel_output:
-        traces.append(go.Scatter(
-            x=data_range.index,
-            y=data_range[data],
-            mode='lines',
-            name= data,
-            marker={
-                'size': 5,
-                'line': {'width': 0.5, 'color': 'blue'}
-            },
-        ))
-
-    return {
-        'data': traces,
-        'layout': go.Layout(
-            title='alpg consumer data',
-            xaxis={'title': 'Time'},
-            yaxis={'title': 'Power Consumption [W]'},
-            legend=dict(x=-.1, y=1.2))
-
-    }
-
-#app.css.append_css({"external_url": "https://codepen.io/chriddyp/pen/brPBPO.css"})
-
-if __name__ == '__main__':
-    app.run_server(debug = True)

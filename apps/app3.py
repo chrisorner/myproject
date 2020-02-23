@@ -1,5 +1,6 @@
 import dash_core_components as dcc
 import dash_html_components as html
+import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 from alpg.set_parameters import set_parameters
 from alpg.profilegenerator import profilegenerator
@@ -11,9 +12,17 @@ import os
 from app import app
 
 
-
 layout = html.Div([
-    html.H3('Load Profile Generator'),
+
+    dbc.Nav(
+        [
+        dbc.NavItem(dbc.NavLink('Home Page',  href='/')),
+        dbc.NavItem(dbc.NavLink('Load Configuration', active=True, href='/apps/app1')),
+        dbc.NavItem(dbc.NavLink('Simulation', href='/apps/app2')),
+
+        ],
+        pills=True,
+    ),
 
     html.Div([
         html.Div([
@@ -76,28 +85,44 @@ layout = html.Div([
         ], className='col-4 offset-md-1'),
         html.Div([
             dcc.Graph(id='graph_loadprofile', config={'displayModeBar': False})
-        ], className='col-6'),
+        ], className='col-5'),
+        html.Div([
+
+            dcc.Checklist(id='checkbox_cons_data',
+                          options=[
+                              {'label': ' Total Energy', 'value': 'Total'},
+                              {'label': ' Electronics', 'value': 'Electronics'},
+                              {'label': ' Fridge', 'value': 'Fridge'},
+                              {'label': ' Inductive', 'value': 'Inductive'},
+                              {'label': ' Lighting', 'value': 'Lighting'},
+                              {'label': ' Other', 'value': 'Other'},
+                              {'label': ' Standby', 'value': 'Standby'}
+                          ], value=['Total'],
+                          style={'width': '50%', 'height': '100%'},
+                          labelStyle={'display': 'block'})
+        ],className='col-2'),
     ], className='row'),
 
 
-    html.Div(id='app-1-display-value'),
-    dcc.Link('Go to App 2', href='/apps/app2'),
-    dcc.Link('Go to Home Page', href='/')
+
+
+    html.Div(id='app-1-display-value')
 ])
 
 
 @app.callback(
     Output('graph_loadprofile', 'figure'),
-    [Input('button_calc', 'n_clicks')],
+    [Input('button_calc', 'n_clicks'),
+     Input('checkbox_cons_data', 'value')],
     [State('n_kids', 'value'),
      State('yearly_cons', 'value'),
      State('dist_work', 'value')])
-def setParam(n_clicks, n_kids, yearly_cons, dist_work):
+def setParam(n_clicks, sel_output, n_kids, yearly_cons, dist_work):
     if n_clicks is not None:
         set_parameters(n_kids,yearly_cons,dist_work)
         profilegenerator()
-        alpg_data = alpg_read_data()
 
+    alpg_data = alpg_read_data()
     start = pd.Timestamp('2018-01-01')
     end = pd.Timestamp('2018-12-31 23:59:00')
 
@@ -105,16 +130,17 @@ def setParam(n_clicks, n_kids, yearly_cons, dist_work):
     data_range = alpg_data.loc[select]
 
     traces = []
-    traces.append(go.Scatter(
-        x=data_range.index,
-        y=data_range['total'],
-        mode='lines',
-        name= 'Consumption Profile',
-        marker={
-            'size': 5,
-            'line': {'width': 0.5, 'color': 'blue'}
-        },
-    ))
+    for data in sel_output:
+         traces.append(go.Scatter(
+                x=data_range.index,
+                y=data_range[data],
+                mode='lines',
+                name= data,
+                marker={
+                    'size': 5,
+                    'line': {'width': 0.5, 'color': 'blue'}
+                },
+            ))
 
     return {
         'data': traces,
