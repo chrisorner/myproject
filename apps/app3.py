@@ -16,12 +16,12 @@ layout = html.Div([
 
     dbc.Nav(
         [
-        dbc.NavItem(dbc.NavLink('Home Page',  href='/')),
-        dbc.NavItem(dbc.NavLink('Load Configuration', active=True, href='/apps/app1')),
-        dbc.NavItem(dbc.NavLink('Simulation', href='/apps/app2')),
+        dbc.NavItem(dbc.NavLink('Home Page',  href='/', style= {'color': 'white'})),
+        dbc.NavItem(dbc.NavLink('Load Configuration', active=True, href='/apps/app1', style= {'color': 'white'})),
+        dbc.NavItem(dbc.NavLink('Simulation', href='/apps/app2', style= {'color': 'white'})),
 
         ],
-        pills=True,
+        className= 'navbar navbar-expand-lg navbar-dark bg-dark fixed-top'
     ),
 
     html.Div([
